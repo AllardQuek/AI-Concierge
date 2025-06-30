@@ -2,22 +2,30 @@
 
 ## 🌳 Branch Structure
 
-- **`master`** - Production-ready code
-- **`develop`** - Integration branch for features
-- **`feature/*`** - Feature development branches
-- **`hotfix/*`** - Emergency fixes for production
+- **`main`** - Primary development branch (replaces old `master`)
+- **`feature/*`** - Feature development branches  
+- **`hotfix/*`** - Emergency fixes for production releases
+- **`release/*`** - Release preparation branches (optional)
+
+> **Note**: We use `main` instead of `master` following modern Git conventions for inclusive language.
 
 ## 🔄 Development Workflow
 
-### Daily Development
+### For Small Projects (Current Approach)
 ```bash
-# Switch to develop branch
-git checkout develop
+# Work directly on main for documentation and small changes
+git checkout main
+git pull origin main
+git add .
+git commit -m "✨ feat: Add new feature"
+git push origin main
+```
 
-# Pull latest changes
-git pull origin develop
-
-# Create feature branch
+### For Feature Development
+```bash
+# Create feature branch from main
+git checkout main
+git pull origin main
 git checkout -b feature/ai-pipeline-activation
 
 # Make changes, then commit
@@ -30,8 +38,8 @@ git push origin feature/ai-pipeline-activation
 
 ### Feature Completion
 ```bash
-# Switch back to develop
-git checkout develop
+# Switch back to main
+git checkout main
 
 # Merge feature (or create pull request)
 git merge feature/ai-pipeline-activation
@@ -39,23 +47,18 @@ git merge feature/ai-pipeline-activation
 # Delete feature branch
 git branch -d feature/ai-pipeline-activation
 
-# Push updated develop
-git push origin develop
+# Push updated main
+git push origin main
 ```
 
 ### Release Process
 ```bash
-# Switch to master
-git checkout master
-
-# Merge develop into master
-git merge develop
-
-# Tag release
+# Tag release from main
+git checkout main
 git tag -a v1.0.0 -m "🚀 Release v1.0.0: Full AI integration"
 
 # Push with tags
-git push origin master --tags
+git push origin main --tags
 ```
 
 ## 📝 Commit Message Convention
@@ -127,7 +130,7 @@ git lg
 git show
 
 # Compare branches
-git diff master..develop
+git diff main..feature-branch
 ```
 
 ### Branch Info
@@ -144,7 +147,7 @@ git for-each-ref --format='%(refname:short) %(committerdate) %(authorname)' --so
 
 ## 🔄 Next Development Steps
 
-### Immediate Tasks (for current branch)
+### Immediate Tasks (current workflow)
 1. **API Configuration**
    ```bash
    git checkout -b feature/api-keys-setup
@@ -191,7 +194,7 @@ git rebase -i HEAD~3
 git commit --amend
 
 # Clean up merged branches
-git branch --merged | grep -v master | xargs -n 1 git branch -d
+git branch --merged | grep -v main | xargs -n 1 git branch -d
 ```
 
 ### Recovery Commands
