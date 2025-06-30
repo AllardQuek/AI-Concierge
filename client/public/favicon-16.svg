@@ -1,0 +1,14 @@
+<!-- Sybil Favicon - Simplified for ICO conversion -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- Background -->
+  <circle cx="8" cy="8" r="7.5" fill="#1976d2" stroke="#ffffff" stroke-width="1"/>
+  
+  <!-- Oracle Eye -->
+  <ellipse cx="8" cy="8" rx="5" ry="3" fill="#ffffff"/>
+  
+  <!-- Iris -->
+  <circle cx="8" cy="8" r="2" fill="#7c4dff"/>
+  
+  <!-- Pupil -->
+  <circle cx="8" cy="8" r="1" fill="#1a237e"/>
+</svg>

@@ -1,0 +1,40 @@
+<!-- Sybil Favicon - 180x180 Apple Touch Icon -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
+  <!-- Background Circle with subtle gradient -->
+  <defs>
+    <radialGradient id="bgGradient" cx="0.3" cy="0.3">
+      <stop offset="0%" stop-color="#1e88e5"/>
+      <stop offset="100%" stop-color="#1565c0"/>
+    </radialGradient>
+  </defs>
+  
+  <circle cx="90" cy="90" r="85" fill="url(#bgGradient)" stroke="#ffffff" stroke-width="8"/>
+  
+  <!-- Oracle Eye -->
+  <ellipse cx="90" cy="90" rx="55" ry="35" fill="#ffffff"/>
+  
+  <!-- Iris with gradient -->
+  <defs>
+    <radialGradient id="irisGradient" cx="0.4" cy="0.3">
+      <stop offset="0%" stop-color="#9c27b0"/>
+      <stop offset="100%" stop-color="#7c4dff"/>
+    </radialGradient>
+  </defs>
+  
+  <circle cx="90" cy="90" r="22" fill="url(#irisGradient)"/>
+  
+  <!-- Pupil -->
+  <circle cx="90" cy="90" r="12" fill="#1a237e"/>
+  
+  <!-- Highlight -->
+  <circle cx="95" cy="85" r="5" fill="#ffffff" opacity="0.9"/>
+  <circle cx="98" cy="88" r="2" fill="#ffffff" opacity="0.6"/>
+  
+  <!-- AI Accent Lines -->
+  <path d="M30 90 L150 90" stroke="#ff9800" stroke-width="3" opacity="0.8"/>
+  <path d="M90 30 L90 150" stroke="#ff9800" stroke-width="3" opacity="0.8"/>
+  
+  <!-- Mystical circles -->
+  <circle cx="90" cy="90" r="70" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.3"/>
+  <circle cx="90" cy="90" r="78" fill="none" stroke="#ff9800" stroke-width="1" opacity="0.4"/>
+</svg>
