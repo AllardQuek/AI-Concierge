@@ -1,14 +1,10 @@
-<!-- Sybil Favicon - 180x180 Apple Touch Icon - Oracle Ear -->
+<!-- Sybil Favicon - 180x180 Apple Touch Icon - Realistic Oracle Ear -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 180" width="180" height="180">
   <!-- Background Circle with gradient -->
   <defs>
     <radialGradient id="bgGradient" cx="0.3" cy="0.3">
       <stop offset="0%" stop-color="#1e88e5"/>
       <stop offset="100%" stop-color="#1565c0"/>
-    </radialGradient>
-    <radialGradient id="earGradient" cx="0.4" cy="0.3">
-      <stop offset="0%" stop-color="#ffffff"/>
-      <stop offset="100%" stop-color="#f5f5f5"/>
     </radialGradient>
     <radialGradient id="innerEarGradient" cx="0.4" cy="0.3">
       <stop offset="0%" stop-color="#9c27b0"/>
@@ -18,24 +14,30 @@
   
   <circle cx="90" cy="90" r="85" fill="url(#bgGradient)" stroke="#ffffff" stroke-width="8"/>
   
-  <!-- Oracle Ear Shape -->
-  <path d="M50 40 C70 30, 100 40, 110 70 C110 90, 100 110, 80 120 C70 110, 60 90, 60 70 C60 55, 55 45, 50 40 Z" fill="url(#earGradient)"/>
+  <!-- Detailed Realistic Ear Outline (Helix) -->
+  <path d="M45 40 C55 30, 75 30, 90 40 C100 50, 105 65, 105 80 C105 95, 100 110, 90 120 C75 130, 55 130, 45 120 C40 110, 40 100, 45 90 C50 80, 60 75, 70 75 C80 75, 85 80, 85 85 C85 90, 80 95, 75 95" 
+        stroke="#ffffff" stroke-width="12" fill="none"/>
   
-  <!-- Inner Ear -->
-  <path d="M65 60 C75 55, 90 60, 95 75 C95 85, 85 95, 75 100 C70 95, 65 85, 65 75 C65 67.5, 65 62.5, 65 60 Z" fill="url(#innerEarGradient)"/>
+  <!-- Inner Ear Shape (Concha) -->
+  <ellipse cx="70" cy="85" rx="20" ry="25" fill="#ffffff"/>
   
   <!-- Ear Canal -->
-  <ellipse cx="77.5" cy="77.5" rx="10" ry="7.5" fill="#1a237e"/>
+  <ellipse cx="70" cy="85" rx="10" ry="12" fill="url(#innerEarGradient)"/>
+  
+  <!-- Inner Canal -->
+  <ellipse cx="70" cy="85" rx="5" ry="6" fill="#1a237e"/>
+  
+  <!-- Tragus (small ear bump) -->
+  <ellipse cx="55" cy="80" rx="7" ry="5" fill="#ffffff"/>
+  
+  <!-- Antitragus -->
+  <ellipse cx="58" cy="95" rx="5" ry="3" fill="#ffffff"/>
   
   <!-- Sound Waves -->
-  <path d="M30 90 Q40 70, 50 90 Q40 110, 30 90" stroke="#ff9800" stroke-width="4" fill="none" opacity="0.9"/>
-  <path d="M20 90 Q35 60, 50 90 Q35 120, 20 90" stroke="#ff9800" stroke-width="3" fill="none" opacity="0.7"/>
-  <path d="M10 90 Q30 50, 50 90 Q30 130, 10 90" stroke="#ff9800" stroke-width="3" fill="none" opacity="0.5"/>
-  <path d="M5 90 Q27.5 40, 50 90 Q27.5 140, 5 90" stroke="#ff9800" stroke-width="2" fill="none" opacity="0.3"/>
-  
-  <!-- AI Accent Dots -->
-  <circle cx="75" cy="70" r="3" fill="#ffffff" opacity="0.9"/>
-  <circle cx="78" cy="73" r="1.5" fill="#ffffff" opacity="0.7"/>
+  <path d="M25 90 Q35 70, 45 90 Q35 110, 25 90" stroke="#ff9800" stroke-width="6" fill="none" opacity="0.9"/>
+  <path d="M15 90 Q30 60, 45 90 Q30 120, 15 90" stroke="#ff9800" stroke-width="5" fill="none" opacity="0.7"/>
+  <path d="M5 90 Q25 50, 45 90 Q25 130, 5 90" stroke="#ff9800" stroke-width="4" fill="none" opacity="0.5"/>
+  <path d="M0 90 Q22.5 40, 45 90 Q22.5 140, 0 90" stroke="#ff9800" stroke-width="3" fill="none" opacity="0.3"/>
   
   <!-- Mystical circles -->
   <circle cx="90" cy="90" r="70" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.3"/>

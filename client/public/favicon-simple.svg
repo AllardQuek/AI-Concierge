@@ -1,14 +1,16 @@
-<!-- Sybil Favicon - Simplified Oracle Ear for ICO conversion -->
+<!-- Sybil Favicon - Simplified Realistic Oracle Ear for ICO conversion -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
   <!-- Background -->
   <rect width="16" height="16" rx="8" fill="#1976d2"/>
   
-  <!-- Simple Oracle Ear -->
-  <path d="M5 4 C7 3, 10 4, 11 7 C11 9, 10 11, 8 12 C7 11, 6 9, 6 7 C6 5.5, 5.5 4.5, 5 4 Z" fill="#ffffff"/>
+  <!-- Simple but recognizable ear outline -->
+  <path d="M4.5 4 C5.5 3, 7.5 3, 9 4 C10 5, 10.5 6.5, 10.5 8 C10.5 9.5, 10 11, 9 12 C7.5 13, 5.5 13, 4.5 12 C4 11, 4 10, 4.5 9 C5 8, 6 7.5, 7 7.5 C8 7.5, 8.5 8, 8.5 8.5" 
+        stroke="#ffffff" stroke-width="1.5" fill="none"/>
   
-  <!-- Inner Ear -->
-  <path d="M6.5 6 C7.5 5.5, 8.5 6, 9 7.5 C9 8.5, 8.5 9.5, 7.5 10 C7 9.5, 6.5 8.5, 6.5 7.5 Z" fill="#7c4dff"/>
+  <!-- Inner ear -->
+  <ellipse cx="7" cy="8.5" rx="2" ry="2.5" fill="#ffffff"/>
+  <ellipse cx="7" cy="8.5" rx="1" ry="1.2" fill="#7c4dff"/>
   
   <!-- Simple Sound Wave -->
-  <path d="M3 8 Q4 7, 5 8 Q4 9, 3 8" stroke="#ff9800" stroke-width="1" fill="none"/>
+  <path d="M2.5 8 Q3.5 7, 4.5 8 Q3.5 9, 2.5 8" stroke="#ff9800" stroke-width="1.2" fill="none"/>
 </svg>
