@@ -103,7 +103,12 @@ jspm_packages/
 
 # Gatsby files
 .cache/
-public
+
+# Vite public directory build outputs (but keep source files)
+client/dist/public/
+
+# Generated public assets (keep source public files)
+# Note: We keep client/public/ source files like audio-processor.js
 
 # Storybook build outputs
 .out
