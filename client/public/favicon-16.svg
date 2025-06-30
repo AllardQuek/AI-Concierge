@@ -1,14 +1,15 @@
-<!-- Sybil Favicon - Simplified for ICO conversion -->
+<!-- Sybil Favicon - 16x16 Oracle Ear Design -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
   <!-- Background -->
   <circle cx="8" cy="8" r="7.5" fill="#1976d2" stroke="#ffffff" stroke-width="1"/>
   
-  <!-- Oracle Eye -->
-  <ellipse cx="8" cy="8" rx="5" ry="3" fill="#ffffff"/>
+  <!-- Simplified Oracle Ear -->
+  <path d="M5 4 C7 3, 10 4, 11 7 C11 9, 10 11, 8 12 C7 11, 6 9, 6 7 C6 5.5, 5.5 4.5, 5 4 Z" fill="#ffffff"/>
   
-  <!-- Iris -->
-  <circle cx="8" cy="8" r="2" fill="#7c4dff"/>
+  <!-- Inner Ear -->
+  <path d="M6.5 6 C7.5 5.5, 8.5 6, 9 7.5 C9 8.5, 8.5 9.5, 7.5 10 C7 9.5, 6.5 8.5, 6.5 7.5 C6.5 6.5, 6.5 6, 6.5 6 Z" fill="#7c4dff"/>
   
-  <!-- Pupil -->
-  <circle cx="8" cy="8" r="1" fill="#1a237e"/>
+  <!-- Sound Waves (simplified) -->
+  <path d="M3 8 Q4 7, 5 8 Q4 9, 3 8" stroke="#ff9800" stroke-width="0.8" fill="none" opacity="0.8"/>
+  <path d="M2 8 Q3.5 6.5, 5 8 Q3.5 9.5, 2 8" stroke="#ff9800" stroke-width="0.8" fill="none" opacity="0.6"/>
 </svg>
