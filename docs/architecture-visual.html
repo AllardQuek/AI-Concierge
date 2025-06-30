@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sybil Architecture Diagrams</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1976d2;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #424242;
+            border-bottom: 2px solid #e0e0e0;
+            padding-bottom: 10px;
+        }
+        .diagram-container {
+            margin: 30px 0;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 4px;
+            background-color: #fafafa;
+        }
+        .mermaid {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏗️ Sybil AI-Enhanced Voice Platform - Architecture Diagrams</h1>
+        
+        <h2>📊 System Architecture Overview</h2>
+        <div class="diagram-container">
+            <div class="mermaid">
+                graph TD
+                    C[Customer Interface<br/>• Call Request<br/>• Audio Controls<br/>• Status View] -.->|WebRTC P2P<br/>30-50ms| A[Agent Interface<br/>• Call Management<br/>• AI Dashboard<br/>• Live Insights]
+                    C -->|Audio Tap| AW1[AudioWorklet<br/>250ms chunks]
+                    A -->|Audio Tap| AW2[AudioWorklet<br/>250ms chunks]
+                    
+                    AW1 --> AI[AI Processing Hub<br/>Port 5001<br/><br/>🤖 OpenAI GPT-4o<br/>🎤 Azure Speech<br/>🧠 Real-time Analysis<br/>⚡ Action Engine]
+                    AW2 --> AI
+                    
+                    AI --> STT[Speech-to-Text<br/>~200ms]
+                    STT --> LLM[LLM Analysis<br/>~500ms<br/>• Sentiment<br/>• Entity Extract<br/>• Intent Detect]
+                    LLM --> ACT[Action Engine<br/>~100ms<br/>• Escalation Alerts<br/>• Knowledge Lookup<br/>• Response Suggestions]
+                    
+                    ACT --> DASH[AI Dashboard<br/>Real-time Updates]
+                    DASH --> A
+                    
+                    style C fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+                    style A fill:#f3e5f5,stroke:#7c4dff,stroke-width:2px
+                    style AI fill:#fff8e1,stroke:#ff9800,stroke-width:3px
+                    style DASH fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+                    style STT fill:#fff3e0,stroke:#f57c00
+                    style LLM fill:#fce4ec,stroke:#c2185b
+                    style ACT fill:#f1f8e9,stroke:#689f38
+            </div>
+        </div>
+
+        <h2>🔄 Data Flow Sequence</h2>
+        <div class="diagram-container">
+            <div class="mermaid">
+                sequenceDiagram
+                    participant C as Customer
+                    participant A as Agent  
+                    participant AI as AI Service
+                    participant LLM as OpenAI GPT-4o
+                    participant DASH as AI Dashboard
+                    
+                    Note over C,A: WebRTC P2P Connection Established
+                    C->>+A: Voice Stream (30-50ms latency)
+                    Note over C,A: ✅ Ultra-low latency maintained
+                    
+                    par Voice Communication (Critical Path)
+                        C->>A: Continuous audio
+                        A->>C: Response audio
+                    and AI Analysis Pipeline (Parallel)
+                        C->>AI: Audio chunks (250ms)
+                        A->>AI: Audio chunks (250ms)
+                        AI->>+LLM: Transcription + Context
+                        Note over LLM: Sentiment Analysis<br/>Entity Extraction<br/>Intent Detection
+                        LLM->>-AI: Insights + Actions
+                        AI->>DASH: Real-time updates
+                        DASH->>A: Live recommendations
+                    end
+                    
+                    Note over AI,DASH: Total AI latency: ~800ms
+                    Note over C,A: Voice latency unchanged: <50ms
+            </div>
+        </div>
+
+        <h2>🏢 Component Integration Map</h2>
+        <div class="diagram-container">
+            <div class="mermaid">
+                graph LR
+                    subgraph "Frontend (React + TypeScript) - Port 3000"
+                        LP[LandingPage.tsx<br/>✅ Role Selection]
+                        CI[CustomerInterface.tsx<br/>✅ Call Request + Audio]
+                        AGI[AgentInterface.tsx<br/>✅ Call Management]
+                        AID[AIDashboard.tsx<br/>✅ Live Insights]
+                        
+                        subgraph "Services"
+                            SOC[socket.ts<br/>✅ WebRTC Signaling]
+                            WEB[webrtc.ts<br/>✅ P2P Communication]
+                            AIS[ai.ts<br/>✅ AI Interface]
+                        end
+                        
+                        subgraph "Audio Processing"
+                            AWP[audio-processor.js<br/>✅ Real-time Chunks]
+                        end
+                    end
+                    
+                    subgraph "Backend (Node.js)"
+                        SIG[Signaling Server<br/>✅ Port 5000<br/>Socket.IO]
+                        AI[AI Service<br/>✅ Port 5001<br/>OpenAI Integration]
+                    end
+                    
+                    subgraph "External APIs"
+                        OAI[OpenAI GPT-4o<br/>⚠️ Needs API Key]
+                        AZS[Azure Speech<br/>⚠️ Optional]
+                    end
+                    
+                    LP --> CI
+                    LP --> AGI
+                    CI --> SOC
+                    AGI --> SOC
+                    AGI --> AID
+                    SOC --> SIG
+                    AIS --> AI
+                    AWP --> AI
+                    AI --> OAI
+                    AI --> AZS
+                    
+                    style CI fill:#e3f2fd,stroke:#1976d2
+                    style AGI fill:#f1f8e9,stroke:#689f38
+                    style AID fill:#fff8e1,stroke:#ff9800
+                    style AI fill:#fce4ec,stroke:#c2185b
+                    style SIG fill:#f3e5f5,stroke:#7c4dff
+                    style OAI fill:#ffebee,stroke:#d32f2f
+                    style AZS fill:#e8eaf6,stroke:#3f51b5
+            </div>
+        </div>
+
+        <h2>⚡ Performance & Latency Breakdown</h2>
+        <div class="diagram-container">
+            <div class="mermaid">
+                gantt
+                    title Sybil Performance Timeline
+                    dateFormat X
+                    axisFormat %L ms
+                    
+                    section Voice (Critical Path)
+                    WebRTC P2P Communication    :crit, voice, 0, 50
+                    
+                    section AI Pipeline (Parallel)
+                    Audio Capture               :ai1, 0, 10
+                    Speech-to-Text              :ai2, after ai1, 200
+                    LLM Analysis                :ai3, after ai2, 500  
+                    Action Generation           :ai4, after ai3, 100
+                    Dashboard Update            :ai5, after ai4, 50
+                    
+                    section Targets
+                    Voice Target (<50ms)        :milestone, target1, 50, 0
+                    AI Target (<1000ms)         :milestone, target2, 860, 0
+            </div>
+        </div>
+    </div>
+
+    <script>
+        mermaid.initialize({ 
+            startOnLoad: true,
+            theme: 'default',
+            themeVariables: {
+                fontFamily: 'Segoe UI, sans-serif',
+                fontSize: '14px'
+            }
+        });
+    </script>
+</body>
+</html>

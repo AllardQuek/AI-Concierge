@@ -1,0 +1,81 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Start Sybil Development",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"dev"
+			],
+			"group": "build",
+			"isBackground": true,
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "new"
+			}
+		},
+		{
+			"label": "Install All Dependencies",
+			"type": "shell",
+			"command": "npm",
+			"args": ["run", "install:all"],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "new"
+			},
+			"problemMatcher": []
+		},
+		{
+			"label": "Start Server Only",
+			"type": "shell",
+			"command": "npm",
+			"args": ["run", "server:dev"],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "new"
+			},
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Start Client Only",
+			"type": "shell",
+			"command": "npm",
+			"args": ["run", "client:dev"],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "new"
+			},
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Build for Production",
+			"type": "shell",
+			"command": "npm",
+			"args": ["run", "build"],
+			"group": "build",
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": true,
+				"panel": "new"
+			},
+			"problemMatcher": []
+		}
+	]
+}
