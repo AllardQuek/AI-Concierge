@@ -403,6 +403,7 @@ const AgentInterface: React.FC = () => {
                 label="Agent Name"
                 value={agentName}
                 onChange={setAgentName}
+                onEnter={loginAgent}
                 placeholder="Enter your agent name"
               />
             </div>

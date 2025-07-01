@@ -345,6 +345,7 @@ const CustomerInterface: React.FC = () => {
                   label="Your Name"
                   value={customerName}
                   onChange={setCustomerName}
+                  onEnter={requestCall}
                   placeholder="Enter your name"
                 />
               </div>
