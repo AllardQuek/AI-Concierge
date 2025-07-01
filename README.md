@@ -142,21 +142,29 @@ PORT=8000 npm run server:dev
 ### Client Configuration
 The client connects to `http://localhost:3001` by default. To change the server URL, modify the `SocketService` constructor in `client/src/services/socket.ts`.
 
-## 🌐 Production Deployment
+## 🌐 Deployment
 
-### Important Security Notes
-- **HTTPS Required**: WebRTC's `getUserMedia` API requires HTTPS in production
-- **STUN/TURN Servers**: Configure proper STUN/TURN servers for NAT traversal
-- **Environment Variables**: Use environment variables for production configuration
+Ready to deploy your Sybil voice platform? We support both free and paid hosting options.
 
-### Build for Production
+### 🆓 Quick Deploy (Free)
+**Backend:** Render.com | **Frontend:** Vercel
+
 ```bash
-# Build client
-npm run build
-
-# Start production server
-npm start
+# Ensure everything is ready
+npm run deploy:prep
 ```
+
+**📖 Complete Guide:** [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+
+### Deployment Options
+- **Free Tier**: Render + Vercel (perfect for POCs)
+- **Premium**: Railway + Vercel (no cold starts)
+- **Enterprise**: AWS/GCP + CDN
+
+### Security Requirements
+- **HTTPS Required**: WebRTC requires HTTPS for microphone access
+- **CORS Configured**: Environment-based origin control
+- **Environment Variables**: Secure configuration management
 
 ## 📚 Documentation
 
