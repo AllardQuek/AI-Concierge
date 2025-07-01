@@ -34,19 +34,27 @@ Your Sybil voice platform is now fully prepared for deployment!
 - [x] Environment files ready
 - [x] Build scripts optimized
 
-### 🎯 Next Steps for Deployment
+### 🎯 READY FOR DEPLOYMENT!
+
+✅ **Code pushed to GitHub:** `https://github.com/AllardQuek/AI-Concierge`
+
+**Next Steps:**
 
 1. **Deploy Backend First** (Railway)
-   - Push code to GitHub
-   - Create Railway account
+   - ✅ Code ready on GitHub
+   - Go to Railway.app
    - Deploy from GitHub repo
+   - Root directory: `/server`
    - Note the Railway URL
 
 2. **Deploy Frontend** (Vercel)
-   - Create Vercel account  
+   - Go to Vercel.com  
    - Import GitHub project
+   - Root directory: `/client`
    - Set environment variable: `VITE_SERVER_URL=your-railway-url`
    - Deploy
+
+📖 **Complete step-by-step guide:** See `DEPLOY-NOW.md`
 
 3. **Configure CORS**
    - Update Railway environment: `CORS_ORIGIN=your-vercel-url`

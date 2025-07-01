@@ -1,5 +1,21 @@
 # 🚀 Deploy Sybil Voice Platform
 
+## 🆓 Free Deployment Options for POC
+
+**Choose your backend hosting:**
+
+### Option A: Render.com (100% Free)
+- ✅ **Completely free** - 750 hours/month
+- ⚠️ **Sleeps after 15min** inactivity (cold starts)
+- 📖 **Guide:** See `DEPLOY-FREE-RENDER.md`
+
+### Option B: Railway (Free Tier)
+- ✅ **$5 free credits** per month (usually enough for POC)
+- ✅ **No sleep** - always available
+- 📖 **Guide:** Continue with this guide below
+
+---
+
 ## Quick Deployment Guide
 
 ### Step 1: Backend Deployment (Railway)
