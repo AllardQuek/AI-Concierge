@@ -50,8 +50,11 @@ export class SocketService {
   private socket: Socket | null = null;
   private serverUrl: string;
 
-  constructor(serverUrl: string = 'http://localhost:3001') {
-    this.serverUrl = serverUrl;
+  constructor(serverUrl?: string) {
+    // Use environment variable or fallback to localhost
+    this.serverUrl = serverUrl || 
+      (import.meta as any).env?.VITE_SERVER_URL || 
+      'http://localhost:3001';
   }
 
   // Connect to the socket server

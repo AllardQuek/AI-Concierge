@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SocketService } from '../services/socket';
 import { WebRTCService } from '../services/webrtc';
-import AIDashboard from './AIDashboard';
+// import AIDashboard from './AIDashboard'; // Temporarily disabled for deployment
 
 // Icons
 const HeadsetIcon = ({ className = "" }: { className?: string }) => (
@@ -111,9 +111,13 @@ const AgentInterface: React.FC = () => {
     });
 
     socket.on('customer-disconnected', () => {
-      setCallState('ended');
+      setCallState('idle');
       setCurrentCall(null);
       stopRingtone();
+      // Clean up WebRTC resources including microphone
+      webrtcService.current?.cleanup();
+      setCallDuration(0);
+      callStartTime.current = null;
     });
 
     // WebRTC signaling
@@ -193,6 +197,8 @@ const AgentInterface: React.FC = () => {
       
     } catch (error) {
       setError('Could not access microphone. Please check permissions.');
+      // Clean up any resources that might have been allocated
+      webrtcService.current?.cleanup();
       declineCall();
     }
   };
@@ -231,7 +237,8 @@ const AgentInterface: React.FC = () => {
       });
     }
     
-    cleanup();
+    // Clean up WebRTC but keep agent available for more calls
+    webrtcService.current?.cleanup();
     setCallState('idle');
     setCurrentCall(null);
     setCallDuration(0);
@@ -254,7 +261,40 @@ const AgentInterface: React.FC = () => {
     console.log('Stopping ringtone...');
   };
 
+  // Add local audio monitoring for testing
+  const [localMonitoring, setLocalMonitoring] = useState<HTMLAudioElement | null>(null);
+  
+  const toggleLocalMonitoring = () => {
+    if (localMonitoring) {
+      // Stop monitoring
+      localMonitoring.pause();
+      localMonitoring.srcObject = null;
+      setLocalMonitoring(null);
+      console.log('Local audio monitoring disabled');
+    } else {
+      // Start monitoring
+      if (webrtcService.current?.getLocalStream()) {
+        const localAudio = document.createElement('audio');
+        localAudio.srcObject = webrtcService.current.getLocalStream();
+        localAudio.volume = 0.1; // Low volume to prevent feedback
+        localAudio.play();
+        setLocalMonitoring(localAudio);
+        console.log('Local audio monitoring enabled - you should hear yourself at low volume');
+      } else {
+        console.log('No local stream available for monitoring');
+      }
+    }
+  };
+
   const cleanup = () => {
+    // Stop local monitoring if active
+    if (localMonitoring) {
+      localMonitoring.pause();
+      localMonitoring.srcObject = null;
+      setLocalMonitoring(null);
+    }
+    
+    // Full cleanup - for logout/disconnect scenarios
     webrtcService.current?.cleanup();
     setAgentStatus('away');
   };
@@ -427,6 +467,19 @@ const AgentInterface: React.FC = () => {
                   <MicrophoneIcon className="w-6 h-6" />
                 )}
               </button>
+              
+              {/* Test button for local audio monitoring */}
+              <button
+                onClick={toggleLocalMonitoring}
+                className={`p-3 rounded-full transition-colors ${
+                  localMonitoring 
+                    ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                    : 'bg-blue-100 hover:bg-blue-200 text-blue-700'
+                }`}
+                title={localMonitoring ? "Stop local microphone test" : "Test local microphone (you'll hear yourself)"}
+              >
+                🎧
+              </button>
             </div>
             
             <button
@@ -466,8 +519,8 @@ const AgentInterface: React.FC = () => {
         <audio ref={remoteAudioRef} autoPlay />
       </div>
 
-      {/* AI Dashboard Component */}
-      <div className="mt-8">
+      {/* AI Dashboard Component - Temporarily disabled for deployment */}
+      {/* <div className="mt-8">
         <AIDashboard 
           sessionId={currentCall?.customerId || ''}
           isCallActive={callState === 'connected'}
@@ -475,7 +528,7 @@ const AgentInterface: React.FC = () => {
             console.log(`Action ${actionId} ${approved ? 'approved' : 'declined'}`);
           }}
         />
-      </div>
+      </div> */}
     </div>
   );
 };

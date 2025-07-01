@@ -8,14 +8,22 @@ const app = express();
 const server = http.createServer(app);
 
 // Configure CORS for both Express and Socket.IO
+const allowedOrigins = process.env.NODE_ENV === 'production' 
+  ? [
+      process.env.CORS_ORIGIN || 'https://sybil-voice.vercel.app',
+      'https://sybil-voice.vercel.app',
+      'https://*.vercel.app'
+    ]
+  : ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"];
+
 app.use(cors({
-  origin: ["http://localhost:3000", "http://localhost:3001"],
+  origin: allowedOrigins,
   credentials: true
 }));
 
 const io = socketIo(server, {
   cors: {
-    origin: ["http://localhost:3000", "http://localhost:3001"],
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -471,9 +479,11 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3001;
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Voice Chat Server running on port ${PORT}`);
   console.log(`📡 WebSocket server ready for connections`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 CORS origins: ${allowedOrigins.join(', ')}`);
 });
 
 // Graceful shutdown

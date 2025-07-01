@@ -84,6 +84,24 @@ const CustomerInterface: React.FC = () => {
 
     const socket = socketService.current;
 
+    // Monitor socket connection state
+    socket.on('connect', () => {
+      setConnectionState('connected');
+      setError('');
+    });
+
+    socket.on('disconnect', () => {
+      setConnectionState('disconnected');
+      // Reset call state if we lose connection
+      if (callState !== 'idle') {
+        setCallState('idle');
+        setError('Connection lost. Please try again.');
+        webrtcService.current?.cleanup();
+        setCallDuration(0);
+        callStartTime.current = null;
+      }
+    });
+
     socket.on('agent-available', () => {
       setCallState('ringing');
     });
@@ -95,13 +113,19 @@ const CustomerInterface: React.FC = () => {
     });
 
     socket.on('call-declined', () => {
-      setCallState('ended');
+      setCallState('idle');
       setError('Call was declined. Please try again later.');
+      // Clean up WebRTC but keep connection for retry
+      webrtcService.current?.cleanup();
     });
 
     socket.on('agent-disconnected', () => {
-      setCallState('ended');
+      setCallState('idle');
       setError('Agent disconnected. Call ended.');
+      // Clean up WebRTC but keep connection for retry
+      webrtcService.current?.cleanup();
+      setCallDuration(0);
+      callStartTime.current = null;
     });
 
     socket.on('no-agents-available', () => {
@@ -178,13 +202,24 @@ const CustomerInterface: React.FC = () => {
     webrtcService.current.onIceCandidate((candidate) => {
       socketService.current!.sendIceCandidate(candidate, 'agent');
     });
+
+    // Create and send offer to start WebRTC connection
+    try {
+      const offer = await webrtcService.current.createOffer();
+      socketService.current.sendOffer(offer, 'agent');
+      console.log('Sent WebRTC offer to agent');
+    } catch (error) {
+      console.error('Error creating WebRTC offer:', error);
+      setError('Failed to establish voice connection');
+    }
   };
 
   const endCall = () => {
     if (socketService.current) {
       socketService.current.emit('customer-end-call');
     }
-    cleanup();
+    // Clean up WebRTC but keep socket connection alive for future calls
+    webrtcService.current?.cleanup();
     setCallState('idle');
     setCallDuration(0);
     callStartTime.current = null;
@@ -197,7 +232,40 @@ const CustomerInterface: React.FC = () => {
     }
   };
 
+  // Add local audio monitoring for testing
+  const [localMonitoring, setLocalMonitoring] = useState<HTMLAudioElement | null>(null);
+  
+  const toggleLocalMonitoring = () => {
+    if (localMonitoring) {
+      // Stop monitoring
+      localMonitoring.pause();
+      localMonitoring.srcObject = null;
+      setLocalMonitoring(null);
+      console.log('Local audio monitoring disabled');
+    } else {
+      // Start monitoring
+      if (webrtcService.current?.getLocalStream()) {
+        const localAudio = document.createElement('audio');
+        localAudio.srcObject = webrtcService.current.getLocalStream();
+        localAudio.volume = 0.1; // Low volume to prevent feedback
+        localAudio.play();
+        setLocalMonitoring(localAudio);
+        console.log('Local audio monitoring enabled - you should hear yourself at low volume');
+      } else {
+        console.log('No local stream available for monitoring');
+      }
+    }
+  };
+
   const cleanup = () => {
+    // Stop local monitoring if active
+    if (localMonitoring) {
+      localMonitoring.pause();
+      localMonitoring.srcObject = null;
+      setLocalMonitoring(null);
+    }
+    
+    // Full cleanup - disconnect socket and clean WebRTC
     webrtcService.current?.cleanup();
     socketService.current?.disconnect();
     setConnectionState('disconnected');
@@ -336,6 +404,19 @@ const CustomerInterface: React.FC = () => {
                     ) : (
                       <MicrophoneIcon className="w-6 h-6" />
                     )}
+                  </button>
+                  
+                  {/* Test button for local audio monitoring */}
+                  <button
+                    onClick={toggleLocalMonitoring}
+                    className={`p-3 rounded-full transition-colors ${
+                      localMonitoring 
+                        ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                        : 'bg-blue-100 hover:bg-blue-200 text-blue-700'
+                    }`}
+                    title={localMonitoring ? "Stop local microphone test" : "Test local microphone (you'll hear yourself)"}
+                  >
+                    🎧
                   </button>
                 </div>
               )}

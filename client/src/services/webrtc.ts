@@ -76,7 +76,18 @@ export class WebRTCService {
   // Create offer for initiating connection
   async createOffer(): Promise<RTCSessionDescriptionInit> {
     if (!this.peerConnection) {
-      throw new Error('Peer connection not initialized');
+      console.log('Peer connection not initialized, reinitializing...');
+      this.initializePeerConnection();
+    }
+
+    // Ensure we have a local stream
+    if (!this.localStream) {
+      console.log('No local stream, getting user media...');
+      await this.getUserMedia();
+    }
+
+    if (!this.peerConnection) {
+      throw new Error('Failed to initialize peer connection');
     }
 
     const offer = await this.peerConnection.createOffer();
@@ -176,6 +187,9 @@ export class WebRTCService {
     }
 
     this.remoteStream = null;
+    
+    // Reinitialize for next call
+    this.initializePeerConnection();
   }
 
   // Get connection state

@@ -8,9 +8,12 @@
     "server:dev": "cd server && npm run dev",
     "client:dev": "cd client && npm run dev",
     "build": "cd client && npm run build",
+    "build:server": "cd server && npm install --only=production",
     "start": "cd server && npm start",
+    "start:prod": "NODE_ENV=production npm run start",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
-    "docs:architecture": "node scripts/generate-architecture.js"
+    "docs:architecture": "node scripts/generate-architecture.js",
+    "deploy:prep": "npm run install:all && npm run build"
   },
   "keywords": ["sybil", "ai-assistant", "voice-chat", "webrtc", "prophetic-ai", "oracle", "react", "nodejs", "socket.io"],
   "author": "",
