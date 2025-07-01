@@ -61,6 +61,18 @@ export class SocketService {
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        // If already connected, resolve immediately
+        if (this.socket && this.socket.connected) {
+          resolve();
+          return;
+        }
+
+        // Clean up existing socket if it exists but is not connected
+        if (this.socket) {
+          this.socket.removeAllListeners();
+          this.socket.disconnect();
+        }
+
         this.socket = io(this.serverUrl, {
           transports: ['websocket', 'polling'],
           timeout: 20000,
@@ -89,6 +101,7 @@ export class SocketService {
   // Disconnect from the socket server
   disconnect(): void {
     if (this.socket) {
+      this.socket.removeAllListeners();
       this.socket.disconnect();
       this.socket = null;
     }

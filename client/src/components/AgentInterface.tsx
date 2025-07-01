@@ -50,6 +50,7 @@ const AgentInterface: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [callDuration, setCallDuration] = useState(0);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Services
   const socketService = useRef<SocketService | null>(null);
@@ -98,6 +99,13 @@ const AgentInterface: React.FC = () => {
     if (!socketService.current) return;
 
     const socket = socketService.current;
+
+    // Remove any existing listeners first to prevent duplicates
+    socket.off('incoming-call');
+    socket.off('customer-disconnected');
+    socket.off('offer');
+    socket.off('answer');
+    socket.off('ice-candidate');
 
     // Customer call requests
     socket.on('incoming-call', ({ customerName, customerId }) => {
@@ -159,16 +167,33 @@ const AgentInterface: React.FC = () => {
       return;
     }
 
-    await connectToServer();
-    if (connectionState === 'connected') {
-      setIsLoggedIn(true);
-      setAgentStatus('available');
+    // Prevent double-clicking during login
+    if (isLoggingIn) {
+      return;
+    }
+
+    try {
+      setIsLoggingIn(true);
       setError('');
       
-      // Register as agent
-      socketService.current?.emit('agent-login', {
-        agentName: agentName.trim()
-      });
+      await connectToServer();
+      
+      // Check if socket is actually connected rather than relying on state
+      if (socketService.current?.isConnected()) {
+        setIsLoggedIn(true);
+        setAgentStatus('available');
+        
+        // Register as agent
+        socketService.current?.emit('agent-login', {
+          agentName: agentName.trim()
+        });
+      } else {
+        setError('Failed to connect to server. Please try again.');
+      }
+    } catch (error) {
+      setError('Failed to connect to server. Please try again.');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
@@ -302,10 +327,18 @@ const AgentInterface: React.FC = () => {
   const logout = () => {
     cleanup();
     socketService.current?.disconnect();
+    
+    // Reset all state to initial values
     setIsLoggedIn(false);
+    setIsLoggingIn(false);
     setConnectionState('disconnected');
     setCallState('idle');
     setCurrentCall(null);
+    setAgentStatus('away');
+    setError('');
+    setCallDuration(0);
+    setIsMuted(false);
+    callStartTime.current = null;
   };
 
   const formatTime = (seconds: number) => {
@@ -364,10 +397,10 @@ const AgentInterface: React.FC = () => {
               
               <button
                 onClick={loginAgent}
-                disabled={!agentName.trim() || connectionState === 'connecting'}
+                disabled={!agentName.trim() || connectionState === 'connecting' || isLoggingIn}
                 className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-medium py-4 rounded-lg transition-colors text-lg"
               >
-                {connectionState === 'connecting' ? 'Connecting...' : 'Login to Dashboard'}
+                {(connectionState === 'connecting' || isLoggingIn) ? 'Connecting...' : 'Login to Dashboard'}
               </button>
             </div>
           </div>
