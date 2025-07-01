@@ -156,3 +156,9 @@ docker-compose.override.yml
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# Temporary deployment files (should be in docs/ only)
+/DEPLOY*.md
+/DEPLOYMENT*.md
+/FREE-DEPLOYMENT*.md
+/READY-TO-DEPLOY*.md
