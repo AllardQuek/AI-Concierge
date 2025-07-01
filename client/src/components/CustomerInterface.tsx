@@ -2,25 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SocketService } from '../services/socket';
 import { WebRTCService } from '../services/webrtc';
-
-// Icons
-const PhoneIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-  </svg>
-);
-
-const MicrophoneIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-  </svg>
-);
-
-const MicrophoneSlashIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 5.586l12.828 12.828M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-  </svg>
-);
+import { PhoneIcon, MicrophoneIcon, MicrophoneSlashIcon, ConnectionStatus, ErrorMessage, Card, IconCircle, Button, TextInput } from './shared';
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 type CallState = 'idle' | 'requesting' | 'waiting' | 'ringing' | 'connected' | 'ended';
@@ -343,57 +325,39 @@ const CustomerInterface: React.FC = () => {
 
         {/* Connection Status */}
         <div className="text-center mb-6">
-          <div className={`inline-flex items-center space-x-2 ${
-            connectionState === 'connected' ? 'text-green-600' : 
-            connectionState === 'connecting' ? 'text-yellow-600' : 'text-red-600'
-          }`}>
-            <div className={`w-2 h-2 rounded-full ${
-              connectionState === 'connected' ? 'bg-green-500' : 
-              connectionState === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-red-500 animate-pulse'
-            }`}></div>
-            <span className="text-sm">
-              {connectionState === 'connected' ? 'Connected' : 
-               connectionState === 'connecting' ? 'Reconnecting...' : 'Connection Lost'}
-            </span>
-          </div>
+          <ConnectionStatus connectionState={connectionState} className="inline-flex" />
         </div>
 
         {/* Error Display */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-            {error}
-          </div>
-        )}
+        <ErrorMessage message={error} className="mb-6" />
 
         {/* Main Interface */}
-        <div className="bg-white rounded-xl shadow-xl p-6">
+        <Card>
           {callState === 'idle' ? (
             /* Initial State */
             <div className="text-center">
-              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <IconCircle color="blue" size="large" className="mx-auto mb-6">
                 <PhoneIcon className="w-10 h-10 text-blue-600" />
-              </div>
+              </IconCircle>
               
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Your Name
-                </label>
-                <input
-                  type="text"
+                <TextInput
+                  label="Your Name"
                   value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
+                  onChange={setCustomerName}
                   placeholder="Enter your name"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                 />
               </div>
               
-              <button
+              <Button
                 onClick={requestCall}
                 disabled={!customerName.trim() || connectionState !== 'connected'}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium py-4 rounded-lg transition-colors text-lg"
+                variant="primary"
+                size="large"
+                fullWidth
               >
                 Call Customer Service
-              </button>
+              </Button>
             </div>
           ) : (
             /* Call State */
@@ -455,15 +419,17 @@ const CustomerInterface: React.FC = () => {
                 </div>
               )}
               
-              <button
+              <Button
                 onClick={endCall}
-                className="w-full bg-red-500 hover:bg-red-600 text-white font-medium py-3 rounded-lg transition-colors"
+                variant="danger"
+                size="medium"
+                fullWidth
               >
                 {callState === 'connected' ? 'End Call' : 'Cancel'}
-              </button>
+              </Button>
             </div>
           )}
-        </div>
+        </Card>
 
         {/* Audio Elements */}
         <audio ref={remoteAudioRef} autoPlay />

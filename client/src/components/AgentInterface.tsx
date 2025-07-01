@@ -2,32 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SocketService } from '../services/socket';
 import { WebRTCService } from '../services/webrtc';
+import { HeadsetIcon, PhoneIcon, MicrophoneIcon, MicrophoneSlashIcon, ConnectionStatus, ErrorMessage, Card, IconCircle, Button, TextInput } from './shared';
 // import AIDashboard from './AIDashboard'; // Temporarily disabled for deployment
-
-// Icons
-const HeadsetIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-  </svg>
-);
-
-const PhoneIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-  </svg>
-);
-
-const MicrophoneIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-  </svg>
-);
-
-const MicrophoneSlashIcon = ({ className = "" }: { className?: string }) => (
-  <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.586 5.586l12.828 12.828M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-  </svg>
-);
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 type AgentStatus = 'available' | 'busy' | 'away';
@@ -415,40 +391,32 @@ const AgentInterface: React.FC = () => {
             <p className="text-gray-600">Access your agent dashboard</p>
           </div>
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-              {error}
-            </div>
-          )}
+          <ErrorMessage message={error} className="mb-6" />
 
-          <div className="bg-white rounded-xl shadow-xl p-6">
-            <div className="text-center">
-              <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <HeadsetIcon className="w-10 h-10 text-green-600" />
-              </div>
-              
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Agent Name
-                </label>
-                <input
-                  type="text"
-                  value={agentName}
-                  onChange={(e) => setAgentName(e.target.value)}
-                  placeholder="Enter your agent name"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none"
-                />
-              </div>
-              
-              <button
-                onClick={loginAgent}
-                disabled={!agentName.trim() || connectionState === 'connecting' || isLoggingIn}
-                className="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-medium py-4 rounded-lg transition-colors text-lg"
-              >
-                {(connectionState === 'connecting' || isLoggingIn) ? 'Connecting...' : 'Login to Dashboard'}
-              </button>
+          <Card center>
+            <IconCircle color="green" size="large" className="mx-auto mb-6">
+              <HeadsetIcon className="w-10 h-10 text-green-600" />
+            </IconCircle>
+            
+            <div className="mb-6">
+              <TextInput
+                label="Agent Name"
+                value={agentName}
+                onChange={setAgentName}
+                placeholder="Enter your agent name"
+              />
             </div>
-          </div>
+            
+            <Button
+              onClick={loginAgent}
+              disabled={!agentName.trim() || connectionState === 'connecting' || isLoggingIn}
+              variant="primary"
+              size="large"
+              fullWidth
+            >
+              {(connectionState === 'connecting' || isLoggingIn) ? 'Connecting...' : 'Login to Dashboard'}
+            </Button>
+          </Card>
         </div>
       </div>
     );
@@ -458,7 +426,7 @@ const AgentInterface: React.FC = () => {
     <div className="min-h-screen p-4">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <div className="bg-white rounded-xl shadow-lg p-6 mb-6">
+        <Card className="mb-6">
           <div className="flex justify-between items-center">
             <div>
               <h1 className="text-2xl font-bold text-gray-800">Agent Dashboard</h1>
@@ -479,6 +447,9 @@ const AgentInterface: React.FC = () => {
                   <option value="away">Away</option>
                 </select>
               </div>
+
+              {/* Connection Status */}
+              <ConnectionStatus connectionState={connectionState} />
               
               <button
                 onClick={logout}
@@ -488,15 +459,15 @@ const AgentInterface: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* Main Content */}
         {callState === 'incoming' && currentCall ? (
           /* Incoming Call */
-          <div className="bg-white rounded-xl shadow-xl p-8 text-center">
-            <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
+          <Card padding="large" center>
+            <IconCircle color="blue" size="large" className="mx-auto mb-6 animate-pulse">
               <PhoneIcon className="w-10 h-10 text-blue-600" />
-            </div>
+            </IconCircle>
             
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Incoming Call</h2>
             <p className="text-xl text-gray-600 mb-2">{currentCall.customerName}</p>
@@ -505,26 +476,28 @@ const AgentInterface: React.FC = () => {
             </p>
             
             <div className="flex justify-center space-x-4">
-              <button
+              <Button
                 onClick={acceptCall}
-                className="bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-8 rounded-lg transition-colors"
+                variant="success"
+                size="medium"
               >
                 Accept Call
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={declineCall}
-                className="bg-red-500 hover:bg-red-600 text-white font-medium py-3 px-8 rounded-lg transition-colors"
+                variant="danger"
+                size="medium"
               >
                 Decline
-              </button>
+              </Button>
             </div>
-          </div>
+          </Card>
         ) : callState === 'connected' && currentCall ? (
           /* Active Call */
-          <div className="bg-white rounded-xl shadow-xl p-8 text-center">
-            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Card padding="large" center>
+            <IconCircle color="green" size="large" className="mx-auto mb-6">
               <PhoneIcon className="w-10 h-10 text-green-600" />
-            </div>
+            </IconCircle>
             
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Connected</h2>
             <p className="text-xl text-gray-600 mb-2">{currentCall.customerName}</p>
@@ -560,19 +533,20 @@ const AgentInterface: React.FC = () => {
               </button>
             </div>
             
-            <button
+            <Button
               onClick={endCall}
-              className="bg-red-500 hover:bg-red-600 text-white font-medium py-3 px-8 rounded-lg transition-colors"
+              variant="danger"
+              size="medium"
             >
               End Call
-            </button>
-          </div>
+            </Button>
+          </Card>
         ) : (
           /* Waiting for Calls */
-          <div className="bg-white rounded-xl shadow-xl p-8 text-center">
-            <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Card padding="large" center>
+            <IconCircle color="gray" size="large" className="mx-auto mb-6">
               <HeadsetIcon className="w-10 h-10 text-gray-600" />
-            </div>
+            </IconCircle>
             
             <h2 className="text-2xl font-bold text-gray-800 mb-2">Ready for Calls</h2>
             <p className="text-gray-600 mb-8">
@@ -583,14 +557,15 @@ const AgentInterface: React.FC = () => {
             </p>
             
             {agentStatus !== 'available' && (
-              <button
+              <Button
                 onClick={() => updateAgentStatus('available')}
-                className="bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-6 rounded-lg transition-colors"
+                variant="primary"
+                size="medium"
               >
                 Go Available
-              </button>
+              </Button>
             )}
-          </div>
+          </Card>
         )}
 
         {/* Audio Elements */}
