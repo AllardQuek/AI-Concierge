@@ -105,7 +105,7 @@ npm run dev
 ```
 
 This will start:
-- **Server**: http://localhost:5000
+- **Server**: http://localhost:3001
 - **Client**: http://localhost:3000
 
 ### Manual Start
@@ -134,13 +134,13 @@ Start server and client separately:
 ## 🔧 Configuration
 
 ### Server Configuration
-The server runs on port 5000 by default. You can change this by setting the `PORT` environment variable:
+The server runs on port 3001 by default. You can change this by setting the `PORT` environment variable:
 ```bash
 PORT=8000 npm run server:dev
 ```
 
 ### Client Configuration
-The client connects to `http://localhost:5000` by default. To change the server URL, modify the `SocketService` constructor in `client/src/services/socket.ts`.
+The client connects to `http://localhost:3001` by default. To change the server URL, modify the `SocketService` constructor in `client/src/services/socket.ts`.
 
 ## 🌐 Production Deployment
 
@@ -191,7 +191,7 @@ voice-bot/
    - Try refreshing the page
 
 3. **Connection Failed**:
-   - Ensure server is running on port 5000
+   - Ensure server is running on port 3001
    - Check firewall settings
    - Verify CORS configuration
 

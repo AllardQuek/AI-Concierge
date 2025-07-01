@@ -137,7 +137,7 @@
 │  │                                                                         │   │
 │  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────┐ │   │
 │  │  │ WebRTC Signaling│  │   AI Service    │  │    External APIs        │ │   │
-│  │  │    (Port 5000)  │  │  (Port 5001)    │  │                         │ │   │
+│  │  │    (Port 3001)  │  │  (Port 5001)    │  │                         │ │   │
 │  │  │                 │  │                 │  │ • OpenAI GPT-4          │ │   │
 │  │  │ • Call Routing  │  │ • STT Pipeline  │  │ • Azure Speech          │ │   │
 │  │  │ • Session Mgmt  │  │ • LLM Analysis  │  │ • Knowledge Base        │ │   │
@@ -352,7 +352,7 @@
 │  ┌─────────────────────────────────────────────────────────────────────────┐   │
 │  │                                                                         │   │
 │  │  server/                                                                │   │
-│  │  ├── index.js                ✅ WebRTC signaling server (Port 5000)    │   │
+│  │  ├── index.js                ✅ WebRTC signaling server (Port 3001)    │   │
 │  │  │   • Socket.IO session management                                    │   │
 │  │  │   • Call routing and agent queuing                                  │   │
 │  │  │   • WebRTC ICE negotiation                                          │   │
