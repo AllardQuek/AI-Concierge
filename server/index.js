@@ -10,9 +10,9 @@ const server = http.createServer(app);
 // Configure CORS for both Express and Socket.IO
 const allowedOrigins = process.env.NODE_ENV === 'production' 
   ? [
-      process.env.CORS_ORIGIN || 'https://sybil-voice.vercel.app',
-      'https://sybil-voice.vercel.app',
-      'https://*.vercel.app'
+      'https://ai-concierge-tgjt.vercel.app',
+      'https://ai-concierge-tgjt-allardqueks-projects.vercel.app',
+      ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [])
     ]
   : ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"];
 
