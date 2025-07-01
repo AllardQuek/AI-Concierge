@@ -123,6 +123,117 @@ graph TB
 
             </div>
         </div>
+
+        <h2>🔄 Data Flow Sequence</h2>
+        <div class="diagram-container">
+            <div class="mermaid">
+sequenceDiagram
+    participant C as Customer
+    participant A as Agent  
+    participant AI as AI Service
+    participant LLM as OpenAI GPT-4o
+    participant DASH as AI Dashboard
+    
+    Note over C,A: WebRTC P2P Connection Established
+    C->>+A: Voice Stream (30-50ms latency)
+    Note over C,A: ✅ Ultra-low latency maintained
+    
+    par Voice Communication (Critical Path)
+        C->>A: Continuous audio
+        A->>C: Response audio
+    and AI Analysis Pipeline (Parallel)
+        C->>AI: Audio chunks (250ms)
+        A->>AI: Audio chunks (250ms)
+        AI->>+LLM: Transcription + Context
+        Note over LLM: Sentiment Analysis<br/>Entity Extraction<br/>Intent Detection
+        LLM->>-AI: Insights + Actions
+        AI->>DASH: Real-time updates
+        DASH->>A: Live recommendations
+    end
+    
+    Note over AI,DASH: Total AI latency: ~800ms
+    Note over C,A: Voice latency unchanged: <50ms
+
+            </div>
+        </div>
+
+        <h2>🏢 Component Integration Map</h2>
+        <div class="diagram-container">
+            <div class="mermaid">
+graph LR
+    subgraph "Frontend (React + TypeScript) - Port 3000"
+        LP[LandingPage.tsx<br/>✅ Role Selection]
+        CI[CustomerInterface.tsx<br/>✅ Call Request + Audio]
+        AGI[AgentInterface.tsx<br/>✅ Call Management]
+        AID[AIDashboard.tsx<br/>✅ Live Insights]
+        
+        subgraph "Services"
+            SOC[socket.ts<br/>✅ WebRTC Signaling]
+            WEB[webrtc.ts<br/>✅ P2P Communication]
+            AIS[ai.ts<br/>✅ AI Interface]
+        end
+        
+        subgraph "Audio Processing"
+            AWP[audio-processor.js<br/>✅ Real-time Chunks]
+        end
+    end
+    
+    subgraph "Backend (Node.js)"
+        SIG[Signaling Server<br/>✅ Port 3001<br/>Socket.IO]
+        AI[AI Service<br/>✅ Port 5001<br/>OpenAI Integration]
+    end
+    
+    subgraph "External APIs"
+        OAI[OpenAI GPT-4o<br/>⚠️ Needs API Key]
+        AZS[Azure Speech<br/>⚠️ Optional]
+    end
+    
+    LP --> CI
+    LP --> AGI
+    CI --> SOC
+    AGI --> SOC
+    AGI --> AID
+    SOC --> SIG
+    AIS --> AI
+    AWP --> AI
+    AI --> OAI
+    AI --> AZS
+    
+    style CI fill:#e3f2fd,stroke:#1976d2
+    style AGI fill:#f1f8e9,stroke:#689f38
+    style AID fill:#fff8e1,stroke:#ff9800
+    style AI fill:#fce4ec,stroke:#c2185b
+    style SIG fill:#f3e5f5,stroke:#7c4dff
+    style OAI fill:#ffebee,stroke:#d32f2f
+    style AZS fill:#e8eaf6,stroke:#3f51b5
+
+            </div>
+        </div>
+
+        <h2>⚡ Performance & Latency Breakdown</h2>
+        <div class="diagram-container">
+            <div class="mermaid">
+gantt
+    title Sybil Performance Timeline
+    dateFormat X
+    axisFormat %L ms
+    
+    section Voice (Critical Path)
+    WebRTC P2P Communication    :crit, voice, 0, 50
+    
+    section AI Pipeline (Parallel)
+    Audio Capture               :ai1, 0, 10
+    Speech-to-Text              :ai2, after ai1, 200
+    LLM Analysis                :ai3, after ai2, 500  
+    Action Generation           :ai4, after ai3, 100
+    Dashboard Update            :ai5, after ai4, 50
+    
+    section Targets
+    Voice Target (<50ms)        :milestone, target1, 50, 0
+    AI Target (<1000ms)         :milestone, target2, 860, 0
+
+            </div>
+        </div>
     </div>
 
     <script>
