@@ -40,7 +40,13 @@ app.use(express.json());
 
 // Health check endpoint
 app.get('/health', (req, res) => {
-  res.json({ status: 'Server is running', rooms: rooms.size, users: users.size });
+  res.json({ 
+    status: 'Server is running', 
+    rooms: rooms.size, 
+    users: users.size,
+    timestamp: new Date().toISOString(),
+    corsOrigins: allowedOrigins
+  });
 });
 
 // Socket.IO connection handling
