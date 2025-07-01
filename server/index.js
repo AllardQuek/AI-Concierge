@@ -27,7 +27,13 @@ const io = socketIo(server, {
     origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true
-  }
+  },
+  // Connection stability improvements
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  upgradeTimeout: 30000,
+  allowUpgrades: true,
+  transports: ['websocket', 'polling']
 });
 
 // Store active rooms, users, agents, and customers

@@ -40,10 +40,16 @@ export interface SocketEvents {
   // Audio status events
   'user-audio-status': (data: { userId: string; isMuted: boolean }) => void;
   
+  // Connection events
+  'connect': () => void;
+  'disconnect': (reason: string) => void;
+  'reconnect': (attemptNumber: number) => void;
+  'reconnect_attempt': (attemptNumber: number) => void;
+  'reconnect_error': (error: Error) => void;
+  'reconnect_failed': () => void;
+  
   // Error events
   'error': (data: { message: string }) => void;
-  'connect': () => void;
-  'disconnect': () => void;
 }
 
 export class SocketService {
@@ -85,8 +91,13 @@ export class SocketService {
         this.socket = io(this.serverUrl, {
           transports: ['websocket', 'polling'],
           timeout: 20000,
-          forceNew: true, // Force new connection to avoid issues with stale connections
           autoConnect: true,
+          // Connection stability improvements
+          reconnection: true,
+          reconnectionAttempts: 5,
+          reconnectionDelay: 1000,
+          reconnectionDelayMax: 5000,
+          randomizationFactor: 0.5,
         });
 
         this.socket.on('connect', () => {
@@ -94,8 +105,29 @@ export class SocketService {
           resolve();
         });
 
-        this.socket.on('disconnect', () => {
-          console.log('SocketService: Disconnected from server at URL:', this.serverUrl);
+        this.socket.on('disconnect', (reason) => {
+          console.log('SocketService: Disconnected from server at URL:', this.serverUrl, 'Reason:', reason);
+          // Don't auto-reconnect on intentional disconnects
+          if (reason === 'io client disconnect') {
+            console.log('SocketService: Intentional disconnect, not reconnecting');
+          }
+        });
+
+        this.socket.on('reconnect', (attemptNumber) => {
+          console.log('SocketService: Reconnected after', attemptNumber, 'attempts');
+        });
+
+        this.socket.on('reconnect_attempt', (attemptNumber) => {
+          console.log('SocketService: Reconnection attempt', attemptNumber);
+        });
+
+        this.socket.on('reconnect_error', (error) => {
+          console.log('SocketService: Reconnection error:', error.message);
+        });
+
+        this.socket.on('reconnect_failed', () => {
+          console.log('SocketService: Reconnection failed after maximum attempts');
+          reject(new Error('Failed to reconnect to server'));
         });
 
         this.socket.on('connect_error', (error) => {

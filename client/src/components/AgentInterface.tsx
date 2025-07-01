@@ -106,6 +106,48 @@ const AgentInterface: React.FC = () => {
     socket.off('offer');
     socket.off('answer');
     socket.off('ice-candidate');
+    socket.off('connect');
+    socket.off('disconnect');
+    socket.off('reconnect');
+    socket.off('reconnect_attempt');
+    socket.off('reconnect_error');
+
+    // Connection state monitoring
+    socket.on('connect', () => {
+      console.log('Agent: Connected to server');
+      setConnectionState('connected');
+      setError('');
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('Agent: Disconnected, reason:', reason);
+      setConnectionState('disconnected');
+      // Only reset call state for unexpected disconnects
+      if (reason !== 'io client disconnect' && callState !== 'idle') {
+        setCallState('idle');
+        setCurrentCall(null);
+        setError('Connection lost. Attempting to reconnect...');
+        webrtcService.current?.cleanup();
+        setCallDuration(0);
+        callStartTime.current = null;
+      }
+    });
+
+    socket.on('reconnect', () => {
+      console.log('Agent: Reconnected to server');
+      setConnectionState('connected');
+      setError('');
+    });
+
+    socket.on('reconnect_attempt', (attemptNumber) => {
+      console.log('Agent: Reconnection attempt', attemptNumber);
+      setConnectionState('connecting');
+    });
+
+    socket.on('reconnect_error', (error) => {
+      console.log('Agent: Reconnection error:', error);
+      setError('Reconnection failed. Please refresh the page.');
+    });
 
     // Customer call requests
     socket.on('incoming-call', ({ customerName, customerId }) => {

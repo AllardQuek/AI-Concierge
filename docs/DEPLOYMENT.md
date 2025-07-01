@@ -110,14 +110,34 @@ Railway offers $5/month in free credits, which is usually sufficient for POCs.
 ## Troubleshooting
 
 ### Connection Issues
+
 - Verify CORS settings match exact URLs (including https://)
 - Check if services are running via health endpoints
 - Ensure environment variables are set correctly
 
 ### WebRTC Issues
+
 - Test on HTTPS only (required for microphone access)
 - Use Chrome/Edge for best WebRTC support
 - Check browser console for detailed error messages
+
+### Connection Stability Issues
+
+If you see the connection status jumping between connected/disconnected:
+
+- **Browser throttling**: Keep the tab active during calls
+- **Network instability**: Check WiFi/cellular signal strength
+- **Server overload**: Monitor server logs for high CPU/memory usage
+- **CORS issues**: Ensure exact URL matches in environment variables
+- **Firewall blocking**: Some corporate networks block WebSocket connections
+
+#### Debugging Connection Issues
+
+1. **Open browser console** and look for reconnection messages
+2. **Check server logs** for connection/disconnection patterns
+3. **Test with different browsers** (Chrome vs Firefox vs Safari)
+4. **Try different networks** (WiFi vs mobile hotspot)
+5. **Monitor server health** endpoint during connection issues
 
 ### Cold Start Issues (Render)
 - Render free tier sleeps after 15min inactivity

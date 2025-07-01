@@ -90,16 +90,33 @@ const CustomerInterface: React.FC = () => {
       setError('');
     });
 
-    socket.on('disconnect', () => {
+    socket.on('disconnect', (reason) => {
+      console.log('Customer: Disconnected, reason:', reason);
       setConnectionState('disconnected');
-      // Reset call state if we lose connection
-      if (callState !== 'idle') {
+      // Only reset call state for unexpected disconnects
+      if (reason !== 'io client disconnect' && callState !== 'idle') {
         setCallState('idle');
-        setError('Connection lost. Please try again.');
+        setError('Connection lost. Attempting to reconnect...');
         webrtcService.current?.cleanup();
         setCallDuration(0);
         callStartTime.current = null;
       }
+    });
+
+    socket.on('reconnect', () => {
+      console.log('Customer: Reconnected to server');
+      setConnectionState('connected');
+      setError('');
+    });
+
+    socket.on('reconnect_attempt', (attemptNumber) => {
+      console.log('Customer: Reconnection attempt', attemptNumber);
+      setConnectionState('connecting');
+    });
+
+    socket.on('reconnect_error', (error) => {
+      console.log('Customer: Reconnection error:', error);
+      setError('Reconnection failed. Please refresh the page.');
     });
 
     socket.on('agent-available', () => {
@@ -326,10 +343,17 @@ const CustomerInterface: React.FC = () => {
 
         {/* Connection Status */}
         <div className="text-center mb-6">
-          <div className={`inline-flex items-center space-x-2 ${connectionState === 'connected' ? 'text-green-600' : 'text-red-600'}`}>
-            <div className={`w-2 h-2 rounded-full ${connectionState === 'connected' ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
+          <div className={`inline-flex items-center space-x-2 ${
+            connectionState === 'connected' ? 'text-green-600' : 
+            connectionState === 'connecting' ? 'text-yellow-600' : 'text-red-600'
+          }`}>
+            <div className={`w-2 h-2 rounded-full ${
+              connectionState === 'connected' ? 'bg-green-500' : 
+              connectionState === 'connecting' ? 'bg-yellow-500 animate-pulse' : 'bg-red-500 animate-pulse'
+            }`}></div>
             <span className="text-sm">
-              {connectionState === 'connected' ? 'Connected' : 'Connecting...'}
+              {connectionState === 'connected' ? 'Connected' : 
+               connectionState === 'connecting' ? 'Reconnecting...' : 'Connection Lost'}
             </span>
           </div>
         </div>
