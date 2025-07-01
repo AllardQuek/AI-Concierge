@@ -55,20 +55,29 @@ export class SocketService {
     this.serverUrl = serverUrl || 
       (import.meta as any).env?.VITE_SERVER_URL || 
       'http://localhost:3001';
+    
+    // Debug logging to see what URL is being used
+    console.log('SocketService: Connecting to server URL:', this.serverUrl);
+    console.log('SocketService: Environment:', (import.meta as any).env?.NODE_ENV);
+    console.log('SocketService: VITE_SERVER_URL:', (import.meta as any).env?.VITE_SERVER_URL);
   }
 
   // Connect to the socket server
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
       try {
+        console.log('SocketService: Attempting to connect to:', this.serverUrl);
+        
         // If already connected, resolve immediately
         if (this.socket && this.socket.connected) {
+          console.log('SocketService: Already connected, reusing connection');
           resolve();
           return;
         }
 
         // Clean up existing socket if it exists but is not connected
         if (this.socket) {
+          console.log('SocketService: Cleaning up existing disconnected socket');
           this.socket.removeAllListeners();
           this.socket.disconnect();
         }
@@ -76,23 +85,35 @@ export class SocketService {
         this.socket = io(this.serverUrl, {
           transports: ['websocket', 'polling'],
           timeout: 20000,
+          forceNew: true, // Force new connection to avoid issues with stale connections
+          autoConnect: true,
         });
 
         this.socket.on('connect', () => {
-          console.log('Connected to server:', this.socket?.id);
+          console.log('SocketService: Connected to server:', this.socket?.id, 'at URL:', this.serverUrl);
           resolve();
         });
 
         this.socket.on('disconnect', () => {
-          console.log('Disconnected from server');
+          console.log('SocketService: Disconnected from server at URL:', this.serverUrl);
         });
 
         this.socket.on('connect_error', (error) => {
-          console.error('Connection error:', error);
+          console.error('SocketService: Connection error to', this.serverUrl, ':', error);
+          
+          // Provide helpful error messages based on error type
+          if (error.message.includes('ECONNREFUSED')) {
+            console.error('SocketService: Backend server is not running on', this.serverUrl);
+            console.error('SocketService: Please start the backend server with: npm run server:dev');
+          } else if (error.message.includes('websocket error')) {
+            console.error('SocketService: WebSocket connection failed, trying polling...');
+          }
+          
           reject(error);
         });
 
       } catch (error) {
+        console.error('SocketService: Connect method error:', error);
         reject(error);
       }
     });

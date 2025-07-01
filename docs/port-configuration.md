@@ -6,20 +6,24 @@
 |---------|------|-----|-------------|
 | **Frontend Application** | `3000` | `http://localhost:3000` | React/Vite client with customer & agent interfaces |
 | **Signaling Server** | `3001` | `http://localhost:3001` | Socket.IO WebRTC signaling & call management |
-| **AI Service** | `5001` | `http://localhost:5001` | LLM processing pipeline & voice analysis |
 
-## 🔧 **Port Change Resolution** 
+## 🔧 **Port Conflict Resolution Strategy** 
 
-### Issue
-- **Original Configuration**: Server on port `5000`
-- **Problem**: macOS AirPlay Receiver occupies port `5000` by default
-- **Solution**: Moved signaling server to port `3001`
+### Ideal Configuration
+- **Frontend (Vite)**: Port 3000 (auto-increments if occupied: 3001, 3002, etc.)
+- **Backend (Node.js)**: Port 3001 (fixed port, fails clearly if occupied)
+- **Socket Connection**: Frontend always connects to backend on port 3001
+
+### Port Conflict Handling
+1. **Vite Development Server**: Automatically finds next available port starting from 3000
+2. **Node.js Backend**: Uses fixed port 3001, provides clear error if port is occupied
+3. **Client Connection**: Always attempts to connect to port 3001 for backend
 
 ### Files Updated
-- ✅ `/server/index.js` - Server port changed from 5000 → 3001
-- ✅ `/client/src/services/socket.ts` - Client connection URL updated
-- ✅ `/README.md` - Documentation updated with new ports
-- ✅ `/docs/visual-architecture.md` - Architecture diagrams updated
+- ✅ `/server/index.js` - Server configured for port 3001
+- ✅ `/client/src/services/socket.ts` - Client connects to port 3001
+- ✅ `/client/vite.config.ts` - Frontend configured for port 3000
+- ✅ Enhanced error handling for connection failures
 
 ## 🚀 **Development Environment**
 
