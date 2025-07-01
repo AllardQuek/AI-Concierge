@@ -137,7 +137,7 @@ const CustomerInterface: React.FC = () => {
       if (webrtcService.current) {
         try {
           const answer = await webrtcService.current.createAnswer(offer);
-          socket.sendAnswer(answer, 'agent');
+          socket.sendAnswer(answer, null); // Let server auto-detect target
         } catch (error) {
           console.error('Error creating answer:', error);
         }
@@ -178,6 +178,9 @@ const CustomerInterface: React.FC = () => {
       // Get user media first
       await webrtcService.current?.getUserMedia();
       
+      // Setup WebRTC listeners immediately after getting media
+      setupWebRTCListeners();
+      
       // Request call from agent
       socketService.current.emit('customer-request-call', {
         customerName: customerName.trim()
@@ -189,25 +192,32 @@ const CustomerInterface: React.FC = () => {
     }
   };
 
-  const initiateWebRTCCall = async () => {
+  const setupWebRTCListeners = () => {
     if (!webrtcService.current || !socketService.current) return;
 
     // Setup WebRTC listeners
     webrtcService.current.onRemoteStream((stream) => {
+      console.log('Customer: Received remote stream from agent');
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = stream;
+        remoteAudioRef.current.play().catch(e => console.log('Audio play failed:', e));
       }
     });
 
     webrtcService.current.onIceCandidate((candidate) => {
-      socketService.current!.sendIceCandidate(candidate, 'agent');
+      console.log('Customer: Sending ICE candidate to agent');
+      socketService.current!.sendIceCandidate(candidate, null); // Let server auto-detect target
     });
+  };
+
+  const initiateWebRTCCall = async () => {
+    if (!webrtcService.current || !socketService.current) return;
 
     // Create and send offer to start WebRTC connection
     try {
       const offer = await webrtcService.current.createOffer();
-      socketService.current.sendOffer(offer, 'agent');
-      console.log('Sent WebRTC offer to agent');
+      socketService.current.sendOffer(offer, null); // Let server auto-detect target
+      console.log('Customer: Sent WebRTC offer to agent');
     } catch (error) {
       console.error('Error creating WebRTC offer:', error);
       setError('Failed to establish voice connection');

@@ -13,7 +13,9 @@
     "start:prod": "NODE_ENV=production npm run start",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
     "docs:architecture": "node scripts/generate-architecture.js",
-    "deploy:prep": "npm run install:all && npm run build"
+    "deploy:prep": "npm run install:all && npm run build",
+    "wake-backend": "./scripts/wake-backend.sh",
+    "check-ports": "./scripts/check-ports.sh"
   },
   "keywords": ["sybil", "ai-assistant", "voice-chat", "webrtc", "prophetic-ai", "oracle", "react", "nodejs", "socket.io"],
   "author": "",

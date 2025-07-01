@@ -23,8 +23,10 @@ export class WebRTCService {
 
     // Handle remote stream
     this.peerConnection.ontrack = (event) => {
+      console.log('WebRTC: Received remote track', event.track.kind, event.track.id);
       const [remoteStream] = event.streams;
       this.remoteStream = remoteStream;
+      console.log('WebRTC: Remote stream tracks:', remoteStream.getTracks().length);
       if (this.onRemoteStreamCallback) {
         this.onRemoteStreamCallback(remoteStream);
       }
@@ -58,10 +60,12 @@ export class WebRTCService {
       });
       
       this.localStream = stream;
+      console.log('WebRTC: Got local stream with tracks:', stream.getTracks().length);
       
       // Add tracks to peer connection
       if (this.peerConnection) {
         stream.getTracks().forEach(track => {
+          console.log('WebRTC: Adding local track to peer connection:', track.kind, track.id);
           this.peerConnection!.addTrack(track, stream);
         });
       }
@@ -101,9 +105,17 @@ export class WebRTCService {
       throw new Error('Peer connection not initialized');
     }
 
+    // Ensure we have a local stream before creating answer
+    if (!this.localStream) {
+      console.log('No local stream when creating answer, getting user media...');
+      await this.getUserMedia();
+    }
+
     await this.peerConnection.setRemoteDescription(offer);
     const answer = await this.peerConnection.createAnswer();
     await this.peerConnection.setLocalDescription(answer);
+    
+    console.log('Created answer with local tracks:', this.localStream?.getTracks().length || 0);
     return answer;
   }
 

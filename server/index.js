@@ -299,80 +299,111 @@ io.on('connection', (socket) => {
 
   // Handle WebRTC signaling (updated for role-based system)
   socket.on('offer', ({ offer, targetUserId }) => {
-    console.log(`Offer from ${socket.id} to ${targetUserId || 'customer/agent'}`);
-    if (targetUserId) {
-      socket.to(targetUserId).emit('offer', {
+    console.log(`Offer from ${socket.id} to ${targetUserId || 'auto-detect'}`);
+    console.log('Current active calls:', Array.from(activeCalls.entries()));
+    console.log('Current users:', Array.from(users.entries()));
+    
+    // Auto-detect target based on active call relationship
+    const user = users.get(socket.id);
+    let actualTargetId = null;
+    
+    console.log(`User sending offer: ${user?.type} (${socket.id})`);
+    
+    if (user && user.type === 'agent') {
+      // Agent sending offer to customer
+      const call = Array.from(activeCalls.values())
+        .find(call => call.agentId === socket.id);
+      if (call) {
+        actualTargetId = call.customerId;
+        console.log(`Found call for agent, target customer: ${actualTargetId}`);
+      } else {
+        console.log('No active call found for agent');
+      }
+    } else if (user && user.type === 'customer') {
+      // Customer sending offer to agent
+      const call = activeCalls.get(socket.id);
+      if (call) {
+        actualTargetId = call.agentId;
+        console.log(`Found call for customer, target agent: ${actualTargetId}`);
+      } else {
+        console.log('No active call found for customer');
+      }
+    }
+    
+    if (actualTargetId) {
+      console.log(`Routing offer from ${socket.id} to ${actualTargetId}`);
+      socket.to(actualTargetId).emit('offer', {
         offer,
         fromUserId: socket.id
       });
     } else {
-      // For role-based system, determine target based on current user
-      const user = users.get(socket.id);
-      if (user && user.type === 'agent') {
-        // Agent sending offer to customer
-        const call = Array.from(activeCalls.values())
-          .find(call => call.agentId === socket.id);
-        if (call) {
-          socket.to(call.customerId).emit('offer', {
-            offer,
-            fromUserId: socket.id
-          });
-        }
-      }
+      console.log(`No active call found for offer from ${socket.id}`);
     }
   });
 
   socket.on('answer', ({ answer, targetUserId }) => {
-    console.log(`Answer from ${socket.id} to ${targetUserId || 'customer/agent'}`);
-    if (targetUserId) {
-      socket.to(targetUserId).emit('answer', {
+    console.log(`Answer from ${socket.id} to ${targetUserId || 'auto-detect'}`);
+    
+    // Auto-detect target based on active call relationship
+    const user = users.get(socket.id);
+    let actualTargetId = null;
+    
+    if (user && user.type === 'agent') {
+      // Agent sending answer to customer
+      const call = Array.from(activeCalls.values())
+        .find(call => call.agentId === socket.id);
+      if (call) {
+        actualTargetId = call.customerId;
+      }
+    } else if (user && user.type === 'customer') {
+      // Customer sending answer to agent
+      const call = activeCalls.get(socket.id);
+      if (call) {
+        actualTargetId = call.agentId;
+      }
+    }
+    
+    if (actualTargetId) {
+      console.log(`Routing answer from ${socket.id} to ${actualTargetId}`);
+      socket.to(actualTargetId).emit('answer', {
         answer,
         fromUserId: socket.id
       });
     } else {
-      // For role-based system
-      const user = users.get(socket.id);
-      if (user && user.type === 'customer') {
-        // Customer sending answer to agent
-        const call = activeCalls.get(socket.id);
-        if (call) {
-          socket.to(call.agentId).emit('answer', {
-            answer,
-            fromUserId: socket.id
-          });
-        }
-      }
+      console.log(`No active call found for answer from ${socket.id}`);
     }
   });
 
   socket.on('ice-candidate', ({ candidate, targetUserId }) => {
-    console.log(`ICE candidate from ${socket.id} to ${targetUserId || 'customer/agent'}`);
-    if (targetUserId) {
-      socket.to(targetUserId).emit('ice-candidate', {
+    console.log(`ICE candidate from ${socket.id} to ${targetUserId || 'auto-detect'}`);
+    
+    // Auto-detect target based on active call relationship
+    const user = users.get(socket.id);
+    let actualTargetId = null;
+    
+    if (user && user.type === 'agent') {
+      // Agent sending ICE candidate to customer
+      const call = Array.from(activeCalls.values())
+        .find(call => call.agentId === socket.id);
+      if (call) {
+        actualTargetId = call.customerId;
+      }
+    } else if (user && user.type === 'customer') {
+      // Customer sending ICE candidate to agent
+      const call = activeCalls.get(socket.id);
+      if (call) {
+        actualTargetId = call.agentId;
+      }
+    }
+    
+    if (actualTargetId) {
+      console.log(`Routing ICE candidate from ${socket.id} to ${actualTargetId}`);
+      socket.to(actualTargetId).emit('ice-candidate', {
         candidate,
         fromUserId: socket.id
       });
     } else {
-      // For role-based system, broadcast to the other party in the call
-      const user = users.get(socket.id);
-      if (user && user.type === 'agent') {
-        const call = Array.from(activeCalls.values())
-          .find(call => call.agentId === socket.id);
-        if (call) {
-          socket.to(call.customerId).emit('ice-candidate', {
-            candidate,
-            fromUserId: socket.id
-          });
-        }
-      } else if (user && user.type === 'customer') {
-        const call = activeCalls.get(socket.id);
-        if (call) {
-          socket.to(call.agentId).emit('ice-candidate', {
-            candidate,
-            fromUserId: socket.id
-          });
-        }
-      }
+      console.log(`No active call found for ICE candidate from ${socket.id}`);
     }
   });
 

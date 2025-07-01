@@ -143,21 +143,21 @@ export class SocketService {
   }
 
   // Send WebRTC offer
-  sendOffer(offer: RTCSessionDescriptionInit, targetUserId: string): void {
+  sendOffer(offer: RTCSessionDescriptionInit, targetUserId?: string | null): void {
     if (this.socket) {
       this.socket.emit('offer', { offer, targetUserId });
     }
   }
 
   // Send WebRTC answer
-  sendAnswer(answer: RTCSessionDescriptionInit, targetUserId: string): void {
+  sendAnswer(answer: RTCSessionDescriptionInit, targetUserId?: string | null): void {
     if (this.socket) {
       this.socket.emit('answer', { answer, targetUserId });
     }
   }
 
   // Send ICE candidate
-  sendIceCandidate(candidate: RTCIceCandidateInit, targetUserId: string): void {
+  sendIceCandidate(candidate: RTCIceCandidateInit, targetUserId?: string | null): void {
     if (this.socket) {
       this.socket.emit('ice-candidate', { candidate, targetUserId });
     }

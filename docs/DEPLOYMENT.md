@@ -99,6 +99,12 @@ Railway offers $5/month in free credits, which is usually sufficient for POCs.
 - [ ] **Voice Call Flow**: Customer → Agent → Voice both ways
 - [ ] **Controls**: Mute/unmute, end call, local monitoring (🎧)
 
+### Local Testing (Same Device)
+- **Echo Prevention**: Use headphones to prevent feedback loops
+- **Alternative**: Test with one side muted (use mute button)
+- **Cross-Browser**: Try different browsers (Chrome/Edge + Firefox)
+- **Incognito Mode**: One window normal, one incognito
+
 ---
 
 ## Troubleshooting
@@ -117,6 +123,18 @@ Railway offers $5/month in free credits, which is usually sufficient for POCs.
 - Render free tier sleeps after 15min inactivity
 - First request after sleep takes 10-30 seconds
 - Consider using Railway ($5/month) for no cold starts
+
+#### How to Wake Up Sleeping Service
+- **Automatic**: Visit frontend → socket connection wakes backend
+- **Manual**: Visit `https://your-backend-url.onrender.com/health`
+- **Command line**: `curl https://your-backend-url.onrender.com/health`
+- **Dashboard**: Render dashboard → Manual Deploy
+
+#### Keep-Alive Options (Optional)
+- **UptimeRobot**: Free service to ping every 5 minutes
+- **Cron-job.org**: Schedule health checks
+- **GitHub Actions**: Scheduled workflow to ping service
+- ⚠️ Note: Excessive pinging may violate Render's fair use policy
 
 ---
 

@@ -133,7 +133,7 @@ const AgentInterface: React.FC = () => {
       if (webrtcService.current) {
         try {
           const answer = await webrtcService.current.createAnswer(offer);
-          socket.sendAnswer(answer, currentCall?.customerId || 'customer');
+          socket.sendAnswer(answer, null); // Let server auto-detect target
         } catch (error) {
           console.error('Error creating answer:', error);
         }
@@ -213,12 +213,13 @@ const AgentInterface: React.FC = () => {
       // Get user media
       await webrtcService.current?.getUserMedia();
       
+      // Setup WebRTC listeners immediately after getting media
+      setupWebRTCCall();
+      
       // Accept the call
       socketService.current.emit('agent-accept-call', {
         customerId: currentCall.customerId
       });
-      
-      setupWebRTCCall();
       
     } catch (error) {
       setError('Could not access microphone. Please check permissions.');
@@ -245,13 +246,15 @@ const AgentInterface: React.FC = () => {
 
     // Setup WebRTC listeners
     webrtcService.current.onRemoteStream((stream) => {
+      console.log('Agent: Received remote stream from customer');
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = stream;
+        remoteAudioRef.current.play().catch(e => console.log('Audio play failed:', e));
       }
     });
 
     webrtcService.current.onIceCandidate((candidate) => {
-      socketService.current!.sendIceCandidate(candidate, currentCall?.customerId || 'customer');
+      socketService.current!.sendIceCandidate(candidate, null); // Let server auto-detect target
     });
   };
 
