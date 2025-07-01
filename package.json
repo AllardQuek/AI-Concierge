@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
     "server:dev": "cd server && npm run dev",
-    "client:dev": "cd client && npm start",
+    "client:dev": "cd client && npm run dev",
     "build": "cd client && npm run build",
     "start": "cd server && npm start",
-    "install:all": "npm install && cd server && npm install && cd ../client && npm install"
+    "install:all": "npm install && cd server && npm install && cd ../client && npm install",
+    "docs:architecture": "node scripts/generate-architecture.js"
   },
   "keywords": ["sybil", "ai-assistant", "voice-chat", "webrtc", "prophetic-ai", "oracle", "react", "nodejs", "socket.io"],
   "author": "",

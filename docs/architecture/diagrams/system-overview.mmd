@@ -1,0 +1,22 @@
+graph TD
+    C[Customer Interface<br/>• Call Request<br/>• Audio Controls<br/>• Status View] -.->|WebRTC P2P<br/>30-50ms| A[Agent Interface<br/>• Call Management<br/>• AI Dashboard<br/>• Live Insights]
+    C -->|Audio Tap| AW1[AudioWorklet<br/>250ms chunks]
+    A -->|Audio Tap| AW2[AudioWorklet<br/>250ms chunks]
+    
+    AW1 --> AI[AI Processing Hub<br/>Port 5001<br/><br/>🤖 OpenAI GPT-4o<br/>🎤 Azure Speech<br/>🧠 Real-time Analysis<br/>⚡ Action Engine]
+    AW2 --> AI
+    
+    AI --> STT[Speech-to-Text<br/>~200ms]
+    STT --> LLM[LLM Analysis<br/>~500ms<br/>• Sentiment<br/>• Entity Extract<br/>• Intent Detect]
+    LLM --> ACT[Action Engine<br/>~100ms<br/>• Escalation Alerts<br/>• Knowledge Lookup<br/>• Response Suggestions]
+    
+    ACT --> DASH[AI Dashboard<br/>Real-time Updates]
+    DASH --> A
+    
+    style C fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style A fill:#f3e5f5,stroke:#7c4dff,stroke-width:2px
+    style AI fill:#fff8e1,stroke:#ff9800,stroke-width:3px
+    style DASH fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    style STT fill:#fff3e0,stroke:#f57c00
+    style LLM fill:#fce4ec,stroke:#c2185b
+    style ACT fill:#f1f8e9,stroke:#689f38

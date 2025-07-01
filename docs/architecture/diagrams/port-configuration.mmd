@@ -1,0 +1,31 @@
+graph TB
+    subgraph "Development Environment"
+        subgraph "Port 3000 - Frontend"
+            REACT[React Application<br/>Vite Dev Server<br/>Customer & Agent UI]
+            REACT --> |Serves| LP[Landing Page]
+            REACT --> |Serves| CI[Customer Interface]
+            REACT --> |Serves| AGI[Agent Interface]
+        end
+        
+        subgraph "Port 3001 - Signaling"
+            SIG[Socket.IO Server<br/>WebRTC Signaling<br/>Call Management]
+            SIG --> |Manages| ROOMS[Room State]
+            SIG --> |Handles| WEBRTC[WebRTC Negotiation]
+            SIG --> |Routes| CALLS[Call Routing]
+        end
+        
+        subgraph "Port 5001 - AI Service"
+            AIS[AI Processing Hub<br/>LLM Pipeline<br/>Voice Analysis]
+            AIS --> |Connects| OPENAI[OpenAI GPT-4o]
+            AIS --> |Optional| AZURE[Azure Speech]
+            AIS --> |Generates| INSIGHTS[Live Insights]
+        end
+    end
+    
+    REACT -->|WebSocket<br/>localhost:3001| SIG
+    AGI -->|HTTP/WS<br/>localhost:5001| AIS
+    
+    style REACT fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style SIG fill:#f3e5f5,stroke:#7c4dff,stroke-width:2px
+    style AIS fill:#fff8e1,stroke:#ff9800,stroke-width:2px
+    style OPENAI fill:#ffebee,stroke:#d32f2f
