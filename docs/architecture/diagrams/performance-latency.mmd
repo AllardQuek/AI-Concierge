@@ -1,0 +1,18 @@
+gantt
+    title Sybil Performance Timeline
+    dateFormat X
+    axisFormat %L ms
+    
+    section Voice (Critical Path)
+    WebRTC P2P Communication    :crit, voice, 0, 50
+    
+    section AI Pipeline (Parallel)
+    Audio Capture               :ai1, 0, 10
+    Speech-to-Text              :ai2, after ai1, 200
+    LLM Analysis                :ai3, after ai2, 500  
+    Action Generation           :ai4, after ai3, 100
+    Dashboard Update            :ai5, after ai4, 50
+    
+    section Targets
+    Voice Target (<50ms)        :milestone, target1, 50, 0
+    AI Target (<1000ms)         :milestone, target2, 860, 0

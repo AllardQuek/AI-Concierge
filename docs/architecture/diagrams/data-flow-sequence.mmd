@@ -1,0 +1,26 @@
+sequenceDiagram
+    participant C as Customer
+    participant A as Agent  
+    participant AI as AI Service
+    participant LLM as OpenAI GPT-4o
+    participant DASH as AI Dashboard
+    
+    Note over C,A: WebRTC P2P Connection Established
+    C->>+A: Voice Stream (30-50ms latency)
+    Note over C,A: ✅ Ultra-low latency maintained
+    
+    par Voice Communication (Critical Path)
+        C->>A: Continuous audio
+        A->>C: Response audio
+    and AI Analysis Pipeline (Parallel)
+        C->>AI: Audio chunks (250ms)
+        A->>AI: Audio chunks (250ms)
+        AI->>+LLM: Transcription + Context
+        Note over LLM: Sentiment Analysis<br/>Entity Extraction<br/>Intent Detection
+        LLM->>-AI: Insights + Actions
+        AI->>DASH: Real-time updates
+        DASH->>A: Live recommendations
+    end
+    
+    Note over AI,DASH: Total AI latency: ~800ms
+    Note over C,A: Voice latency unchanged: <50ms

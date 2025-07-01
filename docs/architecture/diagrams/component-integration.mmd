@@ -1,0 +1,46 @@
+graph LR
+    subgraph "Frontend (React + TypeScript) - Port 3000"
+        LP[LandingPage.tsx<br/>✅ Role Selection]
+        CI[CustomerInterface.tsx<br/>✅ Call Request + Audio]
+        AGI[AgentInterface.tsx<br/>✅ Call Management]
+        AID[AIDashboard.tsx<br/>✅ Live Insights]
+        
+        subgraph "Services"
+            SOC[socket.ts<br/>✅ WebRTC Signaling]
+            WEB[webrtc.ts<br/>✅ P2P Communication]
+            AIS[ai.ts<br/>✅ AI Interface]
+        end
+        
+        subgraph "Audio Processing"
+            AWP[audio-processor.js<br/>✅ Real-time Chunks]
+        end
+    end
+    
+    subgraph "Backend (Node.js)"
+        SIG[Signaling Server<br/>✅ Port 3001<br/>Socket.IO]
+        AI[AI Service<br/>✅ Port 5001<br/>OpenAI Integration]
+    end
+    
+    subgraph "External APIs"
+        OAI[OpenAI GPT-4o<br/>⚠️ Needs API Key]
+        AZS[Azure Speech<br/>⚠️ Optional]
+    end
+    
+    LP --> CI
+    LP --> AGI
+    CI --> SOC
+    AGI --> SOC
+    AGI --> AID
+    SOC --> SIG
+    AIS --> AI
+    AWP --> AI
+    AI --> OAI
+    AI --> AZS
+    
+    style CI fill:#e3f2fd,stroke:#1976d2
+    style AGI fill:#f1f8e9,stroke:#689f38
+    style AID fill:#fff8e1,stroke:#ff9800
+    style AI fill:#fce4ec,stroke:#c2185b
+    style SIG fill:#f3e5f5,stroke:#7c4dff
+    style OAI fill:#ffebee,stroke:#d32f2f
+    style AZS fill:#e8eaf6,stroke:#3f51b5
