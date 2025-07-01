@@ -4,7 +4,21 @@
 
 **Last Updated**: July 1, 2025  
 **Current Branch**: `develop`  
-**Latest Commit**: `bff8232` - Git workflow documentation  
+**Latest Commit**: Port configuration fix
+
+### 🔧 **Recent Fixes** (July 1, 2025)
+
+#### Port Configuration Resolution ✅
+- **Fixed macOS Port Conflict** - Changed server from port 5000 to 3001 (macOS AirPlay conflict)
+- **Updated Client Configuration** - Socket.IO client now connects to correct port (3001)
+- **Server Connectivity Restored** - Both client (3000) and server (3001) running successfully
+- **Documentation Updated** - All docs reflect new port configuration
+- **CORS Configuration** - Updated for new port scheme
+
+#### Current Service Ports
+- **Frontend Application**: `localhost:3000` (React/Vite client)
+- **Signaling Server**: `localhost:3001` (Socket.IO WebRTC signaling)  
+- **AI Service**: `localhost:5001` (LLM/AI processing pipeline)
 
 ### 🌳 Git Repository Health
 - ✅ **Repository Initialized**: Clean Git history with meaningful commits
