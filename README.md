@@ -1,4 +1,4 @@
-# Sybil - AI-Powered Voice Conversation Platform
+****# Sybil - AI-Powered Voice Conversation Platform
 
 ![Version](https://img.shields.io/badge/version-1.0.0--beta-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
