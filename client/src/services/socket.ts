@@ -50,7 +50,7 @@ export class SocketService {
   private socket: Socket | null = null;
   private serverUrl: string;
 
-  constructor(serverUrl: string = 'http://localhost:5001') {
+  constructor(serverUrl: string = 'http://localhost:3001') {
     this.serverUrl = serverUrl;
   }
 
