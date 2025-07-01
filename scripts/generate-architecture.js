@@ -14,6 +14,9 @@ const OUTPUT_FILE = path.join(__dirname, '../docs/architecture-visual.html');
 // Read Mermaid source files
 const systemOverview = fs.readFileSync(path.join(DIAGRAMS_DIR, 'system-overview.mmd'), 'utf8');
 const portConfig = fs.readFileSync(path.join(DIAGRAMS_DIR, 'port-configuration.mmd'), 'utf8');
+const dataFlow = fs.readFileSync(path.join(DIAGRAMS_DIR, 'data-flow-sequence.mmd'), 'utf8');
+const performance = fs.readFileSync(path.join(DIAGRAMS_DIR, 'performance-latency.mmd'), 'utf8');
+const componentMap = fs.readFileSync(path.join(DIAGRAMS_DIR, 'component-integration.mmd'), 'utf8');
 
 // HTML template
 const htmlTemplate = `<!DOCTYPE html>
@@ -86,6 +89,27 @@ ${systemOverview}
         <div class="diagram-container">
             <div class="mermaid">
 ${portConfig}
+            </div>
+        </div>
+
+        <h2>🔄 Data Flow Sequence</h2>
+        <div class="diagram-container">
+            <div class="mermaid">
+${dataFlow}
+            </div>
+        </div>
+
+        <h2>🏢 Component Integration Map</h2>
+        <div class="diagram-container">
+            <div class="mermaid">
+${componentMap}
+            </div>
+        </div>
+
+        <h2>⚡ Performance & Latency Breakdown</h2>
+        <div class="diagram-container">
+            <div class="mermaid">
+${performance}
             </div>
         </div>
     </div>
