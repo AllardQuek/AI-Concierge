@@ -158,6 +158,23 @@ npm run build
 npm start
 ```
 
+## 📚 Documentation
+
+### Architecture Documentation
+- **[Architecture Overview](docs/architecture-visual.html)** - Interactive visual architecture diagrams
+- **[Port Configuration](docs/port-configuration.md)** - Service ports and networking setup
+- **[Architecture Decision Records (ADRs)](docs/decisions/README.md)** - Documented design decisions and rationale
+
+### Key Design Decisions
+- **[ADR-001: Persistent Socket Connections](docs/decisions/001-persistent-socket-connections.md)** - Why we maintain idle connections
+- **[ADR-002: WebRTC Signaling Architecture](docs/decisions/002-webrtc-signaling-architecture.md)** - Socket.IO for WebRTC signaling
+- **[ADR-003: Port Configuration Strategy](docs/decisions/003-port-configuration-strategy.md)** - Service port allocation and conflicts
+
+### Development Documentation  
+- **[Project Summary](docs/project-summary.md)** - High-level project overview
+- **[Development Status](DEVELOPMENT-STATUS.md)** - Current status and next steps
+- **[Git Workflow](docs/git-workflow.md)** - Development and deployment workflow
+
 ## 🧩 Project Structure
 
 ```
