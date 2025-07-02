@@ -1,0 +1,5 @@
+## AI Integration Plans to WebRTC Calls
+
+1. The idea is to have an LLM/AI in the background listening in to the call (undecided whether listening to each individual party or both at the same time) and helping to take agentic actions while the call is ongoing.
+2. Some possible actions include signing up for certain plans/subscriptions, calling APIs to check statuses of the customer, etc. but for a POC we can start with just mocking the actual taking of these actions. Most importantly, the LLM/AI needs to understand the intentions of either party and route to the appropriate action with very high accuracy (need some kind of MCP concept?).
+3. Some features that might be good to have include having live transcription of both parties in the conversation, sentiment analysis, and audio recordings for review if needed.

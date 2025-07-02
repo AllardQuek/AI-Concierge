@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SocketService } from '../services/socket';
 import { WebRTCService } from '../services/webrtc';
+import { transcriptionService } from '../services/transcription';
 import { HeadsetIcon, PhoneIcon, MicrophoneIcon, MicrophoneSlashIcon, ConnectionStatus, ErrorMessage, Card, IconCircle, Button, TextInput } from './shared';
-// import AIDashboard from './AIDashboard'; // Temporarily disabled for deployment
+import AIDashboard from './AIDashboard';
 
 type ConnectionState = 'disconnected' | 'connecting' | 'connected';
 type AgentStatus = 'available' | 'busy' | 'away';
@@ -137,6 +138,11 @@ const AgentInterface: React.FC = () => {
     });
 
     socket.on('customer-disconnected', () => {
+      // End transcription if active - Phase 2 feature
+      if (currentCall) {
+        transcriptionService.endSession(currentCall.customerId);
+      }
+      
       setCallState('idle');
       setCurrentCall(null);
       stopRingtone();
@@ -234,6 +240,9 @@ const AgentInterface: React.FC = () => {
       // Setup WebRTC listeners immediately after getting media
       setupWebRTCCall();
       
+      // Start transcription for the call - Phase 2 feature
+      transcriptionService.startSession(currentCall.customerId);
+      
       // Accept the call
       socketService.current.emit('agent-accept-call', {
         customerId: currentCall.customerId
@@ -277,6 +286,11 @@ const AgentInterface: React.FC = () => {
   };
 
   const endCall = () => {
+    // End transcription session - Phase 2 feature
+    if (currentCall) {
+      transcriptionService.endSession(currentCall.customerId);
+    }
+
     if (socketService.current && currentCall) {
       socketService.current.emit('agent-end-call', {
         customerId: currentCall.customerId
@@ -425,42 +439,45 @@ const AgentInterface: React.FC = () => {
 
   return (
     <div className="min-h-screen p-4">
-      <div className="max-w-2xl mx-auto">
-        {/* Header */}
-        <Card className="mb-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">Agent Dashboard</h1>
-              <p className="text-gray-600">Welcome, {agentName}</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              {/* Status Indicator */}
-              <div className="flex items-center space-x-2">
-                <div className={`w-3 h-3 rounded-full ${getStatusColor(agentStatus)}`}></div>
-                <select
-                  value={agentStatus}
-                  onChange={(e) => updateAgentStatus(e.target.value as AgentStatus)}
-                  className="border border-gray-300 rounded px-3 py-1 text-sm"
-                  disabled={callState === 'connected'}
-                >
-                  <option value="available">Available</option>
-                  <option value="busy">Busy</option>
-                  <option value="away">Away</option>
-                </select>
-              </div>
+      <div className="max-w-4xl mx-auto"> {/* Increased max width to accommodate AI Dashboard */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Agent Interface */}
+          <div className="lg:col-span-2">
+            {/* Header */}
+            <Card className="mb-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-800">Agent Dashboard</h1>
+                  <p className="text-gray-600">Welcome, {agentName}</p>
+                </div>
+                <div className="flex items-center space-x-4">
+                  {/* Status Indicator */}
+                  <div className="flex items-center space-x-2">
+                    <div className={`w-3 h-3 rounded-full ${getStatusColor(agentStatus)}`}></div>
+                    <select
+                      value={agentStatus}
+                      onChange={(e) => updateAgentStatus(e.target.value as AgentStatus)}
+                      className="border border-gray-300 rounded px-3 py-1 text-sm"
+                      disabled={callState === 'connected'}
+                    >
+                      <option value="available">Available</option>
+                      <option value="busy">Busy</option>
+                      <option value="away">Away</option>
+                    </select>
+                  </div>
 
-              {/* Connection Status */}
-              <ConnectionStatus connectionState={connectionState} />
-              
-              <button
-                onClick={logout}
-                className="text-red-600 hover:text-red-800 text-sm"
-              >
-                Logout
-              </button>
-            </div>
-          </div>
-        </Card>
+                  {/* Connection Status */}
+                  <ConnectionStatus connectionState={connectionState} />
+                  
+                  <button
+                    onClick={logout}
+                    className="text-red-600 hover:text-red-800 text-sm"
+                  >
+                    Logout
+                  </button>
+                </div>
+              </div>
+            </Card>
 
         {/* Main Content */}
         {callState === 'incoming' && currentCall ? (
@@ -569,20 +586,23 @@ const AgentInterface: React.FC = () => {
           </Card>
         )}
 
-        {/* Audio Elements */}
-        <audio ref={remoteAudioRef} autoPlay />
-      </div>
+            {/* Audio Elements */}
+            <audio ref={remoteAudioRef} autoPlay />
+          </div>
 
-      {/* AI Dashboard Component - Temporarily disabled for deployment */}
-      {/* <div className="mt-8">
-        <AIDashboard 
-          sessionId={currentCall?.customerId || ''}
-          isCallActive={callState === 'connected'}
-          onActionExecute={(actionId, approved) => {
-            console.log(`Action ${actionId} ${approved ? 'approved' : 'declined'}`);
-          }}
-        />
-      </div> */}
+          {/* AI Dashboard Sidebar */}
+          <div className="lg:col-span-1">
+            <AIDashboard 
+              sessionId={currentCall?.customerId || ''}
+              isCallActive={callState === 'connected'}
+              customerName={currentCall?.customerName}
+              onActionExecute={(actionId, approved) => {
+                console.log(`Action ${actionId} ${approved ? 'approved' : 'declined'}`);
+              }}
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
