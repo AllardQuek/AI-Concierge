@@ -14,19 +14,22 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({
   className = ''
 }) => {
   const [conversation, setConversation] = useState<ConversationData | null>(null);
-  const [isListening, setIsListening] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [manualInput, setManualInput] = useState('');
+  const [selectedSpeaker, setSelectedSpeaker] = useState<'agent' | 'customer'>('agent');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // Check if speech recognition is supported
+    setSpeechSupported(transcriptionService.isSpeechRecognitionSupported());
+
     if (!sessionId || !isActive) {
       setConversation(null);
-      setIsListening(false);
       return;
     }
 
     // Start transcription session
     transcriptionService.startSession(sessionId);
-    setIsListening(true);
 
     // Subscribe to transcription updates
     const unsubscribe = transcriptionService.onTranscriptionUpdate(({ sessionId: updateSessionId, conversation: updatedConversation }) => {
@@ -35,15 +38,9 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({
       }
     });
 
-    // Start mock simulation for demo
-    setTimeout(() => {
-      transcriptionService.startMockSimulation(sessionId);
-    }, 2000);
-
     return () => {
       unsubscribe();
       transcriptionService.endSession(sessionId);
-      setIsListening(false);
     };
   }, [sessionId, isActive]);
 
@@ -53,6 +50,19 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({
       scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
     }
   }, [conversation?.segments]);
+
+  const handleManualInput = () => {
+    if (manualInput.trim() && sessionId) {
+      transcriptionService.addManualTranscription(sessionId, selectedSpeaker, manualInput.trim());
+      setManualInput('');
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleManualInput();
+    }
+  };
 
   const formatTime = (timestamp: number) => {
     const date = new Date(timestamp);
@@ -92,10 +102,20 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({
         <div className="flex items-center justify-between">
           <h3 className="text-lg font-semibold text-gray-800">Live Conversation</h3>
           <div className="flex items-center space-x-2">
-            {isListening && (
+            {speechSupported && isActive ? (
               <div className="flex items-center space-x-1">
                 <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></div>
-                <span className="text-xs text-gray-600">Recording</span>
+                <span className="text-xs text-gray-600">Agent Mic Active</span>
+              </div>
+            ) : speechSupported ? (
+              <div className="flex items-center space-x-1">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span className="text-xs text-gray-600">Speech Recognition Ready</span>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-1">
+                <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                <span className="text-xs text-gray-600">Manual Input Mode</span>
               </div>
             )}
           </div>
@@ -103,6 +123,12 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({
         <p className="text-sm text-gray-500 mt-1">
           Session: {sessionId.substring(0, 8)}...
         </p>
+        {speechSupported && (
+          <div className="text-xs text-blue-600 mt-1 bg-blue-50 p-2 rounded">
+            🎙️ <strong>Agent speech:</strong> Auto-captured via microphone<br/>
+            👤 <strong>Customer speech:</strong> Use manual input below (browser limitation)
+          </div>
+        )}
       </div>
 
       <div 
@@ -172,6 +198,49 @@ const ConversationHistory: React.FC<ConversationHistoryProps> = ({
           </div>
         </div>
       )}
+
+      {/* Manual input section */}
+      <div className="mt-4">
+        <div className="flex items-center space-x-2 mb-2">
+          <button
+            onClick={() => setSelectedSpeaker('agent')}
+            className={`px-3 py-1 text-xs rounded-full font-medium ${
+              selectedSpeaker === 'agent' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'
+            }`}
+          >
+            Agent
+          </button>
+          <button
+            onClick={() => setSelectedSpeaker('customer')}
+            className={`px-3 py-1 text-xs rounded-full font-medium ${
+              selectedSpeaker === 'customer' ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700'
+            }`}
+          >
+            Customer
+          </button>
+        </div>
+        <div className="flex">
+          <input
+            type="text"
+            value={manualInput}
+            onChange={(e) => setManualInput(e.target.value)}
+            onKeyPress={handleKeyPress}
+            className="flex-1 px-3 py-2 text-sm border rounded-l-md focus:outline-none focus:ring-1 focus:ring-blue-500"
+            placeholder="Type your message here..."
+          />
+          <button
+            onClick={handleManualInput}
+            className="px-4 py-2 text-sm bg-blue-500 text-white rounded-r-md hover:bg-blue-600 transition"
+          >
+            Send
+          </button>
+        </div>
+        {!speechSupported && (
+          <p className="text-xs text-red-500 mt-2">
+            Speech recognition is not supported in this browser. Please use manual input.
+          </p>
+        )}
+      </div>
     </Card>
   );
 };

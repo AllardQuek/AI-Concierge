@@ -278,6 +278,10 @@ const AgentInterface: React.FC = () => {
         remoteAudioRef.current.srcObject = stream;
         remoteAudioRef.current.play().catch(e => console.log('Audio play failed:', e));
       }
+      
+      // Connect transcription service to WebRTC streams - Phase 2 integration
+      const localStream = webrtcService.current?.getLocalStream();
+      transcriptionService.connectToWebRTCStreams(localStream || null, stream);
     });
 
     webrtcService.current.onIceCandidate((candidate) => {
