@@ -7,6 +7,15 @@ export const MobileWebRTCExample: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
   const [audioReady, setAudioReady] = useState(false);
   const [userInteracted, setUserInteracted] = useState(false);
+  const [connectionLog, setConnectionLog] = useState<string[]>([]);
+
+  // Add timestamped log entries
+  const addLog = useCallback((message: string) => {
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = `[${timestamp}] ${message}`;
+    console.log('WebRTC Debug:', logEntry);
+    setConnectionLog(prev => [...prev.slice(-9), logEntry]);
+  }, []);
 
   // Handle user interaction for mobile audio
   const handleUserInteraction = useCallback(async () => {
@@ -24,45 +33,86 @@ export const MobileWebRTCExample: React.FC = () => {
 
   // Setup WebRTC event handlers
   useEffect(() => {
+    addLog('Setting up WebRTC event handlers');
+
     webrtcService.onConnectionStateChange((state) => {
       setIsConnected(state === 'connected');
+      addLog(`🔗 Connection state: ${state}`);
       
-      // Ensure audio is ready when connected
+      // This is the key sequence you're seeing: connecting → connected → disconnected → failed
       if (state === 'connected') {
+        addLog('✅ WebRTC connection established - checking ICE state...');
         webrtcService.ensureMobileAudioReady();
+      } else if (state === 'disconnected') {
+        addLog('⚠️ Connection disconnected - this often precedes failure');
+        addLog(`ICE state: ${webrtcService.getIceConnectionState()}`);
+      } else if (state === 'failed') {
+        addLog('❌ Connection failed - likely NAT/firewall issue');
+        addLog('💡 This is the issue from your logs! Consider adding TURN servers');
       }
     });
 
     webrtcService.onRemoteStream((stream) => {
-      console.log('Received remote stream with tracks:', stream.getTracks().length);
+      addLog(`📺 Received remote stream with ${stream.getTracks().length} tracks`);
       // Remote audio is automatically handled by the service
     });
 
     return () => {
+      addLog('🧹 Cleaning up WebRTC service');
       webrtcService.cleanup();
     };
-  }, [webrtcService]);
+  }, [webrtcService, addLog]);
 
   // Start call with mobile audio preparation
   const startCall = async () => {
     try {
+      addLog('🚀 Starting call...');
+      
       // First ensure mobile audio is ready
       await handleUserInteraction();
+      addLog('🎤 Mobile audio interaction handled');
       
       // Get user media (microphone)
       await webrtcService.getUserMedia();
+      addLog('📹 User media acquired');
       
       // Create offer and start WebRTC signaling
       const offer = await webrtcService.createOffer();
+      addLog('📋 WebRTC offer created');
       
       // TODO: Send offer through your signaling mechanism (e.g., Socket.IO)
       // socket.emit('offer', offer);
       console.log('Offer created:', offer);
       
-      console.log('Call started with mobile audio support');
+      addLog('✅ Call started - watch for connection state changes');
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      addLog(`❌ Failed to start call: ${errorMessage}`);
       console.error('Failed to start call:', error);
       alert('Failed to start call. Please check microphone permissions.');
+    }
+  };
+
+  // Recovery function for connection failures
+  const attemptRecovery = async () => {
+    try {
+      addLog('🔄 Attempting connection recovery...');
+      const currentState = webrtcService.getConnectionState();
+      const iceState = webrtcService.getIceConnectionState();
+      
+      addLog(`Current states - Connection: ${currentState}, ICE: ${iceState}`);
+      
+      if (currentState === 'failed') {
+        addLog('Trying ICE restart...');
+        await webrtcService.restartIce();
+      } else {
+        addLog('Restarting entire connection...');
+        webrtcService.cleanup();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        await startCall();
+      }
+    } catch (error) {
+      addLog(`❌ Recovery failed: ${error}`);
     }
   };
 
@@ -149,15 +199,56 @@ export const MobileWebRTCExample: React.FC = () => {
         >
           End Call
         </button>
+        
+        <button 
+          onClick={attemptRecovery}
+          disabled={isConnected}
+          className="btn btn-warning"
+        >
+          🔄 Recover Connection
+        </button>
       </div>
 
       {/* Debug Information */}
       <div className="debug-info">
         <h3>Debug Info</h3>
         <p><strong>Connection State:</strong> {webrtcService.getConnectionState()}</p>
+        <p><strong>ICE State:</strong> {webrtcService.getIceConnectionState()}</p>
         <p><strong>Muted:</strong> {webrtcService.isMuted() ? 'Yes' : 'No'}</p>
         <p><strong>Local Stream:</strong> {webrtcService.getLocalStream() ? 'Active' : 'None'}</p>
         <p><strong>Remote Stream:</strong> {webrtcService.getRemoteStream() ? 'Active' : 'None'}</p>
+      </div>
+
+      {/* Connection Log - This will help diagnose your connection issues */}
+      <div className="connection-log">
+        <h3>Connection Log</h3>
+        <div style={{ 
+          maxHeight: '200px', 
+          overflowY: 'auto', 
+          backgroundColor: '#f5f5f5', 
+          padding: '10px', 
+          borderRadius: '5px',
+          fontFamily: 'monospace',
+          fontSize: '12px',
+          border: '1px solid #ddd'
+        }}>
+          {connectionLog.length === 0 ? (
+            <p>No log entries yet...</p>
+          ) : (
+            connectionLog.map((entry, index) => (
+              <div key={index} style={{ marginBottom: '2px' }}>
+                {entry}
+              </div>
+            ))
+          )}
+        </div>
+        <button 
+          onClick={() => setConnectionLog([])}
+          className="btn btn-secondary"
+          style={{ marginTop: '10px', fontSize: '12px', padding: '5px 10px' }}
+        >
+          Clear Log
+        </button>
       </div>
     </div>
   );

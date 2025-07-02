@@ -75,6 +75,22 @@ export class WebRTCService {
     this.peerConnection.onicegatheringstatechange = () => {
       console.log('ICE gathering state:', this.peerConnection?.iceGatheringState);
     };
+
+    // Handle ICE connection state changes - crucial for diagnosing connection failures
+    this.peerConnection.oniceconnectionstatechange = () => {
+      const iceState = this.peerConnection?.iceConnectionState || 'new';
+      console.log('ICE connection state:', iceState);
+      
+      // This is the key diagnostic information for your connection issues
+      if (iceState === 'failed') {
+        console.log('🔴 ICE connection failed - usually indicates NAT/firewall issues');
+        console.log('💡 Consider adding TURN servers for better connectivity');
+      } else if (iceState === 'disconnected') {
+        console.log('🟡 ICE connection disconnected - connection may recover or fail');
+      } else if (iceState === 'connected' || iceState === 'completed') {
+        console.log('🟢 ICE connection established successfully');
+      }
+    };
   }
 
   // Get user media (microphone access)
@@ -244,6 +260,27 @@ export class WebRTCService {
   // Get connection state
   getConnectionState(): string {
     return this.peerConnection?.connectionState || 'disconnected';
+  }
+
+  // Get ICE connection state
+  getIceConnectionState(): string {
+    return this.peerConnection?.iceConnectionState || 'new';
+  }
+
+  // Attempt to restart ICE connection (useful for recovering from connection failures)
+  async restartIce(): Promise<void> {
+    if (this.peerConnection && this.peerConnection.connectionState === 'failed') {
+      console.log('🔄 Attempting ICE restart to recover connection...');
+      try {
+        this.peerConnection.restartIce();
+        console.log('✅ ICE restart initiated');
+      } catch (error) {
+        console.error('❌ ICE restart failed:', error);
+        throw error;
+      }
+    } else {
+      console.log('⚠️ ICE restart not needed or not available');
+    }
   }
 
   // Get local stream
