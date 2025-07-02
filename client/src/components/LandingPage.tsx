@@ -104,16 +104,6 @@ const LandingPage: React.FC = () => {
         {/* Footer */}
         <div className="mt-16 text-gray-500">
           <p>🔮 Oracle Wisdom • 📞 Voice Conversations • 🤖 AI-Powered Insights</p>
-          
-          {/* Mobile Testing Link */}
-          <div className="mt-4">
-            <button
-              onClick={() => navigate('/mobile-test')}
-              className="text-blue-500 hover:text-blue-700 text-sm underline"
-            >
-              📱 Test Mobile Audio Compatibility
-            </button>
-          </div>
         </div>
       </div>
     </div>
