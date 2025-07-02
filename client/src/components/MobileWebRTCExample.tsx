@@ -86,10 +86,14 @@ export const MobileWebRTCExample: React.FC = () => {
   }, [webrtcService, handleUserInteraction]);
 
   // Example: This would be called when receiving an offer from signaling
-  // useEffect(() => {
-  //   socket.on('offer', handleIncomingCall);
-  //   return () => socket.off('offer', handleIncomingCall);
-  // }, [handleIncomingCall]);
+  useEffect(() => {
+    // Uncomment below to enable incoming call handling
+    // socket.on('offer', handleIncomingCall);
+    // return () => socket.off('offer', handleIncomingCall);
+    
+    // For now, log that the handler is ready
+    console.log('Incoming call handler is ready for future implementation');
+  }, [handleIncomingCall]);
 
   return (
     <div className="mobile-webrtc-example">
