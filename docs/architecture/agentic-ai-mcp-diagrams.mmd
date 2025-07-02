@@ -1,0 +1,190 @@
+```mermaid
+graph TB
+    subgraph "Voice Conversation Layer"
+        A[Customer Speech] --> B[Agent Interface]
+        B --> C[Transcription Service]
+        C --> D[Real-time Conversation History]
+    end
+
+    subgraph "AI Analysis & Decision Layer"
+        D --> E[AI Analysis Service]
+        E --> F[Intent Detection]
+        E --> G[Entity Extraction]
+        E --> H[Sentiment Analysis]
+        
+        F --> I[Agentic AI Service]
+        G --> I
+        H --> I
+        
+        I --> J{Action Generation}
+        J --> K[Low Risk Actions<br/>🔍 Lookups<br/>📊 Analytics]
+        J --> L[Medium Risk Actions<br/>📧 Communications<br/>✏️ Updates]
+        J --> M[High Risk Actions<br/>💳 Financial<br/>⬆️ Escalations]
+    end
+
+    subgraph "Model Context Protocol (MCP) Layer"
+        K --> N[Auto-Execute<br/>No Approval]
+        L --> O[Agent Approval<br/>Required]
+        M --> P[Supervisor Approval<br/>Required]
+        
+        N --> Q[MCP Tools Execution]
+        O --> R{Agent Decision}
+        P --> S{Supervisor Decision}
+        
+        R -->|Approve| Q
+        R -->|Reject| T[Action Rejected]
+        S -->|Approve| Q
+        S -->|Reject| T
+    end
+
+    subgraph "Business Systems Integration"
+        Q --> U[Customer Database<br/>👤 Profile Lookup]
+        Q --> V[Order Management<br/>📦 Order Operations]
+        Q --> W[Payment Systems<br/>💳 Financial Operations]
+        Q --> X[Communication APIs<br/>📧 Email & SMS]
+        Q --> Y[Support Systems<br/>🎫 Ticket Management]
+        Q --> Z[Analytics Platform<br/>📊 Action Tracking]
+    end
+
+    subgraph "Results & Feedback Layer"
+        U --> AA[Action Results]
+        V --> AA
+        W --> AA
+        X --> AA
+        Y --> AA
+        Z --> AA
+        
+        AA --> BB[Oracle Dashboard Update]
+        AA --> CC[Agent Notification]
+        AA --> DD[Customer Response]
+        
+        BB --> EE[Conversation Context Update]
+        CC --> EE
+        DD --> EE
+        
+        EE --> D
+    end
+
+    %% Styling
+    classDef voiceLayer fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    classDef aiLayer fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    classDef mcpLayer fill:#e8f5e8,stroke:#1b5e20,stroke-width:2px
+    classDef businessLayer fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    classDef resultsLayer fill:#fce4ec,stroke:#880e4f,stroke-width:2px
+    
+    class A,B,C,D voiceLayer
+    class E,F,G,H,I,J,K,L,M aiLayer
+    class N,O,P,Q,R,S,T mcpLayer
+    class U,V,W,X,Y,Z businessLayer
+    class AA,BB,CC,DD,EE resultsLayer
+```
+
+**Component Interaction Flow:**
+
+```mermaid
+sequenceDiagram
+    participant C as Customer
+    participant A as Agent Interface
+    participant T as Transcription Service
+    participant AI as AI Analysis
+    participant AG as Agentic AI
+    participant MCP as MCP Tools
+    participant BS as Business Systems
+    participant D as Oracle Dashboard
+
+    C->>A: "I want to cancel order #12345"
+    A->>T: Voice → Text Conversion
+    T->>AI: Analyze: "cancel order #12345"
+    AI->>AG: Intent: cancellation, Entity: #12345
+    
+    Note over AG: Generate Actions
+    AG->>AG: 1. lookup_order (auto)
+    AG->>AG: 2. cancel_order (approval)
+    AG->>AG: 3. send_confirmation (approval)
+    
+    AG->>MCP: Execute lookup_order(#12345)
+    MCP->>BS: Query Order Database
+    BS->>MCP: Order Details: $299.99, Eligible
+    MCP->>AG: Order found, cancellable
+    
+    AG->>D: Show order details + approval prompt
+    D->>A: Display: "Order #12345 ready to cancel"
+    A->>AG: Agent approves cancellation
+    
+    AG->>MCP: Execute cancel_order(#12345)
+    MCP->>BS: Process Cancellation
+    BS->>MCP: Cancelled, Refund Initiated
+    
+    AG->>MCP: Execute send_confirmation(email)
+    MCP->>BS: Send Email via Communication API
+    BS->>MCP: Email sent successfully
+    
+    MCP->>D: Update: All actions completed
+    D->>A: Show: "✅ Order cancelled, refund processed"
+    A->>C: "Your order has been cancelled, refund in 3-5 days"
+```
+
+**Data Flow Architecture:**
+
+```mermaid
+graph LR
+    subgraph "Input Processing"
+        A[Voice Input] --> B[Speech-to-Text]
+        B --> C[Intent Recognition]
+        C --> D[Entity Extraction]
+    end
+
+    subgraph "Intelligence Layer"
+        D --> E[Context Analysis]
+        E --> F[Action Planning]
+        F --> G[Risk Assessment]
+    end
+
+    subgraph "Execution Engine"
+        G --> H{Risk Level?}
+        H -->|Low| I[Auto Execute]
+        H -->|Medium| J[Agent Approval]
+        H -->|High| K[Supervisor Approval]
+        
+        I --> L[MCP Tool Call]
+        J --> M{Approved?}
+        K --> N{Approved?}
+        M -->|Yes| L
+        N -->|Yes| L
+        M -->|No| O[Action Cancelled]
+        N -->|No| O
+    end
+
+    subgraph "Business Integration"
+        L --> P[Customer DB]
+        L --> Q[Order System]
+        L --> R[Payment Gateway]
+        L --> S[Email Service]
+        L --> T[Support CRM]
+    end
+
+    subgraph "Response Generation"
+        P --> U[Action Results]
+        Q --> U
+        R --> U
+        S --> U
+        T --> U
+        
+        U --> V[Update Dashboard]
+        U --> W[Notify Agent]
+        U --> X[Log Analytics]
+    end
+
+    %% Styling
+    classDef input fill:#bbdefb,stroke:#1976d2
+    classDef intelligence fill:#c8e6c9,stroke:#388e3c
+    classDef execution fill:#ffecb3,stroke:#f57c00
+    classDef business fill:#f8bbd9,stroke:#c2185b
+    classDef response fill:#d1c4e9,stroke:#512da8
+    
+    class A,B,C,D input
+    class E,F,G intelligence
+    class H,I,J,K,L,M,N,O execution
+    class P,Q,R,S,T business
+    class U,V,W,X response
+```

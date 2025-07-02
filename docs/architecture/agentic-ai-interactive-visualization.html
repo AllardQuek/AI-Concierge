@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sybil Agentic AI & MCP Architecture Visualization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.1rem;
+            color: #666;
+        }
+
+        .architecture-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+
+        .layer {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            border-left: 5px solid;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .layer:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .layer::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 50px;
+            height: 50px;
+            opacity: 0.1;
+            background: currentColor;
+            border-radius: 0 15px 0 50px;
+        }
+
+        .voice-layer {
+            border-left-color: #01579b;
+            color: #01579b;
+        }
+
+        .ai-layer {
+            border-left-color: #4a148c;
+            color: #4a148c;
+        }
+
+        .mcp-layer {
+            border-left-color: #1b5e20;
+            color: #1b5e20;
+        }
+
+        .business-layer {
+            border-left-color: #e65100;
+            color: #e65100;
+        }
+
+        .results-layer {
+            border-left-color: #880e4f;
+            color: #880e4f;
+        }
+
+        .layer-title {
+            font-size: 1.4rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .layer-icon {
+            font-size: 1.8rem;
+        }
+
+        .component {
+            background: #f8f9fa;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border-left: 3px solid currentColor;
+            transition: all 0.2s ease;
+            cursor: pointer;
+        }
+
+        .component:hover {
+            background: #e9ecef;
+            transform: translateX(5px);
+        }
+
+        .component:last-child {
+            margin-bottom: 0;
+        }
+
+        .flow-diagram {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 40px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .flow-title {
+            font-size: 1.6rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #333;
+        }
+
+        .flow-steps {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .flow-step {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 25px;
+            font-weight: bold;
+            min-width: 120px;
+            text-align: center;
+            position: relative;
+            animation: pulse 2s infinite;
+        }
+
+        .flow-step:not(:last-child)::after {
+            content: '→';
+            position: absolute;
+            right: -30px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.5rem;
+            color: #667eea;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+
+        .action-matrix {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 40px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .matrix-title {
+            font-size: 1.6rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #333;
+        }
+
+        .matrix-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+        }
+
+        .risk-level {
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .low-risk {
+            background: linear-gradient(135deg, #4caf50, #66bb6a);
+        }
+
+        .medium-risk {
+            background: linear-gradient(135deg, #ff9800, #ffb74d);
+        }
+
+        .high-risk {
+            background: linear-gradient(135deg, #f44336, #ef5350);
+        }
+
+        .critical-risk {
+            background: linear-gradient(135deg, #9c27b0, #ba68c8);
+        }
+
+        .interactive-demo {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+
+        .demo-title {
+            font-size: 1.6rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+            color: #333;
+        }
+
+        .demo-scenario {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 30px;
+            align-items: start;
+        }
+
+        .demo-input {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+        }
+
+        .demo-output {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+        }
+
+        .action-card {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            transition: all 0.3s ease;
+        }
+
+        .action-card:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        .action-header {
+            display: flex;
+            justify-content: between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .action-type {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .action-status {
+            padding: 4px 8px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            color: white;
+        }
+
+        .status-pending {
+            background: #ff9800;
+        }
+
+        .status-approved {
+            background: #4caf50;
+        }
+
+        .status-completed {
+            background: #2196f3;
+        }
+
+        .approve-btn {
+            background: linear-gradient(135deg, #4caf50, #66bb6a);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .approve-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
+        }
+
+        @media (max-width: 768px) {
+            .architecture-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .flow-steps {
+                flex-direction: column;
+            }
+
+            .flow-step:not(:last-child)::after {
+                content: '↓';
+                right: 50%;
+                top: 100%;
+                transform: translateX(50%);
+            }
+
+            .demo-scenario {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔮 Sybil Agentic AI Architecture</h1>
+            <p>Interactive visualization of Model Context Protocol integration and real-time action processing</p>
+        </div>
+
+        <div class="architecture-grid">
+            <div class="layer voice-layer">
+                <div class="layer-title">
+                    <span class="layer-icon">🎙️</span>
+                    Voice Conversation Layer
+                </div>
+                <div class="component">👤 Customer Speech Input</div>
+                <div class="component">🖥️ Agent Interface</div>
+                <div class="component">📝 Transcription Service</div>
+                <div class="component">📚 Conversation History</div>
+            </div>
+
+            <div class="layer ai-layer">
+                <div class="layer-title">
+                    <span class="layer-icon">🧠</span>
+                    AI Analysis & Decision
+                </div>
+                <div class="component">🎯 Intent Detection</div>
+                <div class="component">🏷️ Entity Extraction</div>
+                <div class="component">😊 Sentiment Analysis</div>
+                <div class="component">🤖 Agentic AI Service</div>
+            </div>
+
+            <div class="layer mcp-layer">
+                <div class="layer-title">
+                    <span class="layer-icon">⚡</span>
+                    Model Context Protocol
+                </div>
+                <div class="component">🔍 Tool Orchestration</div>
+                <div class="component">⚖️ Risk Assessment</div>
+                <div class="component">✅ Approval Workflow</div>
+                <div class="component">🔄 Action Execution</div>
+            </div>
+
+            <div class="layer business-layer">
+                <div class="layer-title">
+                    <span class="layer-icon">🏢</span>
+                    Business Systems
+                </div>
+                <div class="component">👤 Customer Database</div>
+                <div class="component">📦 Order Management</div>
+                <div class="component">💳 Payment Processing</div>
+                <div class="component">📧 Communication APIs</div>
+            </div>
+
+            <div class="layer results-layer">
+                <div class="layer-title">
+                    <span class="layer-icon">🔄</span>
+                    Results & Feedback
+                </div>
+                <div class="component">🔮 Oracle Dashboard</div>
+                <div class="component">🚨 Agent Notifications</div>
+                <div class="component">📊 Analytics Tracking</div>
+                <div class="component">🔄 Context Updates</div>
+            </div>
+        </div>
+
+        <div class="flow-diagram">
+            <div class="flow-title">Real-Time Action Flow</div>
+            <div class="flow-steps">
+                <div class="flow-step">🎙️ Speech</div>
+                <div class="flow-step">🧠 Analysis</div>
+                <div class="flow-step">🤖 Action Gen</div>
+                <div class="flow-step">⚖️ Risk Check</div>
+                <div class="flow-step">✅ Approval</div>
+                <div class="flow-step">⚡ Execute</div>
+                <div class="flow-step">📊 Results</div>
+            </div>
+        </div>
+
+        <div class="action-matrix">
+            <div class="matrix-title">Action Risk Assessment Matrix</div>
+            <div class="matrix-grid">
+                <div class="risk-level low-risk">
+                    <h3>🟢 Low Risk</h3>
+                    <p>Auto-Execute</p>
+                    <small>Lookups, Read-only operations</small>
+                </div>
+                <div class="risk-level medium-risk">
+                    <h3>🟡 Medium Risk</h3>
+                    <p>Agent Approval</p>
+                    <small>Updates, Communications</small>
+                </div>
+                <div class="risk-level high-risk">
+                    <h3>🔴 High Risk</h3>
+                    <p>Supervisor Approval</p>
+                    <small>Financial, Escalations</small>
+                </div>
+                <div class="risk-level critical-risk">
+                    <h3>⚫ Critical</h3>
+                    <p>Manual Only</p>
+                    <small>Account deletion, Legal</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="interactive-demo">
+            <div class="demo-title">🧪 Interactive Demo Scenario</div>
+            <div class="demo-scenario">
+                <div class="demo-input">
+                    <h3>🎙️ Customer Input</h3>
+                    <p><strong>"I want to cancel my order #12345"</strong></p>
+                    <br>
+                    <h4>🧠 AI Detection:</h4>
+                    <ul>
+                        <li>🎯 Intent: cancellation</li>
+                        <li>🏷️ Entity: order #12345</li>
+                        <li>😊 Sentiment: neutral</li>
+                    </ul>
+                </div>
+                <div class="demo-output">
+                    <h3>🤖 Generated Actions</h3>
+                    
+                    <div class="action-card">
+                        <div class="action-header">
+                            <span class="action-type">🔍 Lookup Order</span>
+                            <span class="action-status status-completed">✅ Completed</span>
+                        </div>
+                        <p>Found: Wireless Headphones ($299.99)</p>
+                        <small>Risk: Low | Auto-executed</small>
+                    </div>
+
+                    <div class="action-card">
+                        <div class="action-header">
+                            <span class="action-type">💳 Cancel Order & Refund</span>
+                            <span class="action-status status-pending">⏳ Pending</span>
+                        </div>
+                        <p>Process cancellation and $299.99 refund</p>
+                        <small>Risk: High | Requires approval</small>
+                        <br><br>
+                        <button class="approve-btn" onclick="approveAction(this)">Approve Action</button>
+                    </div>
+
+                    <div class="action-card">
+                        <div class="action-header">
+                            <span class="action-type">📧 Send Confirmation</span>
+                            <span class="action-status status-pending">⏳ Pending</span>
+                        </div>
+                        <p>Email cancellation confirmation to customer</p>
+                        <small>Risk: Medium | Requires approval</small>
+                        <br><br>
+                        <button class="approve-btn" onclick="approveAction(this)">Approve Action</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function approveAction(button) {
+            const actionCard = button.closest('.action-card');
+            const statusSpan = actionCard.querySelector('.action-status');
+            
+            // Update status to approved
+            statusSpan.textContent = '✅ Approved';
+            statusSpan.className = 'action-status status-approved';
+            
+            // Replace button with execution message
+            button.outerHTML = '<small style="color: #4caf50; font-weight: bold;">✅ Executing...</small>';
+            
+            // Simulate execution after 2 seconds
+            setTimeout(() => {
+                statusSpan.textContent = '🎉 Completed';
+                statusSpan.className = 'action-status status-completed';
+                
+                const executingMsg = actionCard.querySelector('small[style*="color: #4caf50"]');
+                if (executingMsg) {
+                    executingMsg.outerHTML = '<small style="color: #2196f3; font-weight: bold;">🎉 Successfully executed!</small>';
+                }
+            }, 2000);
+        }
+
+        // Add hover effects to components
+        document.querySelectorAll('.component').forEach(component => {
+            component.addEventListener('click', () => {
+                component.style.background = '#667eea';
+                component.style.color = 'white';
+                component.style.transform = 'scale(1.05)';
+                
+                setTimeout(() => {
+                    component.style.background = '#f8f9fa';
+                    component.style.color = 'inherit';
+                    component.style.transform = 'translateX(5px)';
+                }, 500);
+            });
+        });
+
+        // Add animation to flow steps
+        let currentStep = 0;
+        const flowSteps = document.querySelectorAll('.flow-step');
+        
+        setInterval(() => {
+            flowSteps.forEach((step, index) => {
+                if (index === currentStep) {
+                    step.style.background = 'linear-gradient(135deg, #4caf50, #66bb6a)';
+                    step.style.transform = 'scale(1.1)';
+                } else {
+                    step.style.background = 'linear-gradient(135deg, #667eea, #764ba2)';
+                    step.style.transform = 'scale(1)';
+                }
+            });
+            
+            currentStep = (currentStep + 1) % flowSteps.length;
+        }, 1000);
+    </script>
+</body>
+</html>
