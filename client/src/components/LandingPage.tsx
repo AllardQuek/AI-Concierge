@@ -16,6 +16,20 @@ const LandingPage: React.FC = () => {
           </p>
         </div>
 
+        {/* Mobile Audio Notice */}
+        <div className="mb-8 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center justify-center mb-2">
+            <span className="text-2xl mr-2">📱</span>
+            <span className="font-semibold text-blue-800">Mobile Users</span>
+          </div>
+          <p className="text-blue-700 text-sm">
+            For the best voice experience on mobile devices, please ensure you tap any button to enable audio when prompted.
+          </p>
+          <p className="text-blue-600 text-xs mt-1">
+            ✅ Optimized for iOS Safari, Android Chrome, and all modern mobile browsers
+          </p>
+        </div>
+
         {/* Role Selection Cards */}
         <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
           {/* Customer Card */}
@@ -90,6 +104,16 @@ const LandingPage: React.FC = () => {
         {/* Footer */}
         <div className="mt-16 text-gray-500">
           <p>🔮 Oracle Wisdom • 📞 Voice Conversations • 🤖 AI-Powered Insights</p>
+          
+          {/* Mobile Testing Link */}
+          <div className="mt-4">
+            <button
+              onClick={() => navigate('/mobile-test')}
+              className="text-blue-500 hover:text-blue-700 text-sm underline"
+            >
+              📱 Test Mobile Audio Compatibility
+            </button>
+          </div>
         </div>
       </div>
     </div>

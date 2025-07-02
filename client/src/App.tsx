@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import LandingPage from './components/LandingPage';
 import CustomerInterface from './components/CustomerInterface';
 import AgentInterface from './components/AgentInterface';
+import MobileWebRTCExample from './components/MobileWebRTCExample';
 
 const App: React.FC = () => {
   return (
@@ -12,6 +13,7 @@ const App: React.FC = () => {
           <Route path="/" element={<LandingPage />} />
           <Route path="/customer" element={<CustomerInterface />} />
           <Route path="/agent" element={<AgentInterface />} />
+          <Route path="/mobile-test" element={<MobileWebRTCExample />} />
         </Routes>
       </div>
     </Router>

@@ -228,6 +228,11 @@ const AgentInterface: React.FC = () => {
       setCallState('connected');
       callStartTime.current = Date.now();
       
+      // Prepare mobile audio BEFORE getting user media
+      if (webrtcService.current) {
+        await webrtcService.current.ensureMobileAudioReady();
+      }
+      
       // Get user media
       await webrtcService.current?.getUserMedia();
       

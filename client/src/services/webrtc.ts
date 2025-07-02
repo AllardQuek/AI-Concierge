@@ -3,8 +3,11 @@ export class WebRTCService {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
+  private remoteAudioElement: HTMLAudioElement | null = null;
+  private audioContext: AudioContext | null = null;
   private onRemoteStreamCallback?: (stream: MediaStream) => void;
   private onConnectionStateChangeCallback?: (state: string) => void;
+  private userInteractionOccurred: boolean = false;
 
   // ICE servers configuration for NAT traversal
   private iceServers = [
@@ -14,6 +17,29 @@ export class WebRTCService {
 
   constructor() {
     this.initializePeerConnection();
+    this.setupMobileAudioSupport();
+  }
+
+  // Setup mobile audio support and user interaction handling
+  private setupMobileAudioSupport() {
+    // Create audio context for mobile compatibility
+    if (typeof window !== 'undefined' && window.AudioContext) {
+      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+
+    // Setup user interaction handler for mobile
+    const enableAudioOnInteraction = () => {
+      this.userInteractionOccurred = true;
+      if (this.audioContext && this.audioContext.state === 'suspended') {
+        this.audioContext.resume();
+      }
+      // Remove listeners after first interaction
+      document.removeEventListener('touchstart', enableAudioOnInteraction);
+      document.removeEventListener('click', enableAudioOnInteraction);
+    };
+
+    document.addEventListener('touchstart', enableAudioOnInteraction, { once: true });
+    document.addEventListener('click', enableAudioOnInteraction, { once: true });
   }
 
   private initializePeerConnection() {
@@ -27,6 +53,10 @@ export class WebRTCService {
       const [remoteStream] = event.streams;
       this.remoteStream = remoteStream;
       console.log('WebRTC: Remote stream tracks:', remoteStream.getTracks().length);
+      
+      // Create and configure audio element for mobile compatibility
+      this.setupRemoteAudio(remoteStream);
+      
       if (this.onRemoteStreamCallback) {
         this.onRemoteStreamCallback(remoteStream);
       }
@@ -50,12 +80,11 @@ export class WebRTCService {
   // Get user media (microphone access)
   async getUserMedia(): Promise<MediaStream> {
     try {
+      // Use mobile-optimized constraints
+      const audioConstraints = this.getMobileAudioConstraints();
+      
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
+        audio: audioConstraints,
         video: false,
       });
       
@@ -193,6 +222,14 @@ export class WebRTCService {
       this.localStream = null;
     }
 
+    // Clean up remote audio element
+    if (this.remoteAudioElement) {
+      this.remoteAudioElement.pause();
+      this.remoteAudioElement.srcObject = null;
+      this.remoteAudioElement.remove();
+      this.remoteAudioElement = null;
+    }
+
     if (this.peerConnection) {
       this.peerConnection.close();
       this.peerConnection = null;
@@ -217,5 +254,119 @@ export class WebRTCService {
   // Get remote stream
   getRemoteStream(): MediaStream | null {
     return this.remoteStream;
+  }
+
+  // Setup remote audio element for mobile compatibility
+  private setupRemoteAudio(stream: MediaStream) {
+    // Remove existing audio element if any
+    if (this.remoteAudioElement) {
+      this.remoteAudioElement.remove();
+    }
+
+    // Create new audio element
+    this.remoteAudioElement = document.createElement('audio');
+    this.remoteAudioElement.srcObject = stream;
+    this.remoteAudioElement.autoplay = true;
+    (this.remoteAudioElement as any).playsInline = true; // Essential for iOS
+    this.remoteAudioElement.controls = false;
+    this.remoteAudioElement.style.display = 'none';
+    
+    // Add to DOM for mobile compatibility
+    document.body.appendChild(this.remoteAudioElement);
+
+    // Handle audio play promise for mobile
+    this.playRemoteAudio();
+  }
+
+  // Handle audio playback with mobile-specific considerations
+  private async playRemoteAudio() {
+    if (!this.remoteAudioElement) return;
+
+    try {
+      // Try to play immediately if user has interacted
+      if (this.userInteractionOccurred) {
+        await this.remoteAudioElement.play();
+        console.log('WebRTC: Remote audio started playing');
+        return;
+      }
+
+      // Try autoplay first
+      await this.remoteAudioElement.play();
+      console.log('WebRTC: Remote audio started playing (autoplay)');
+    } catch (error) {
+      console.warn('WebRTC: Autoplay blocked, waiting for user interaction:', error);
+      
+      // If autoplay is blocked, wait for user interaction
+      const playOnInteraction = async () => {
+        try {
+          if (this.remoteAudioElement) {
+            await this.remoteAudioElement.play();
+            console.log('WebRTC: Remote audio started after user interaction');
+          }
+        } catch (playError) {
+          console.error('WebRTC: Failed to play audio after interaction:', playError);
+        }
+        document.removeEventListener('touchstart', playOnInteraction);
+        document.removeEventListener('click', playOnInteraction);
+      };
+
+      document.addEventListener('touchstart', playOnInteraction, { once: true });
+      document.addEventListener('click', playOnInteraction, { once: true });
+    }
+  }
+
+  // Force audio context resume for mobile (call this on user interaction)
+  async resumeAudioContext(): Promise<void> {
+    if (this.audioContext && this.audioContext.state === 'suspended') {
+      try {
+        await this.audioContext.resume();
+        console.log('WebRTC: Audio context resumed');
+      } catch (error) {
+        console.warn('WebRTC: Failed to resume audio context:', error);
+      }
+    }
+  }
+
+  // Ensure audio is ready for mobile devices
+  async ensureMobileAudioReady(): Promise<void> {
+    // Resume audio context if suspended
+    await this.resumeAudioContext();
+    
+    // Try to play remote audio if it exists
+    if (this.remoteAudioElement && this.remoteAudioElement.paused) {
+      try {
+        await this.remoteAudioElement.play();
+      } catch (error) {
+        console.warn('WebRTC: Could not auto-play remote audio:', error);
+      }
+    }
+  }
+
+  // Get mobile-optimized audio constraints
+  private getMobileAudioConstraints(): MediaTrackConstraints {
+    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+      return {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        // Mobile-specific optimizations
+        sampleRate: 48000,
+        sampleSize: 16,
+        channelCount: 1, // Mono for mobile
+      };
+    }
+
+    return {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    };
+  }
+
+  // Check if user interaction has occurred (useful for UI feedback)
+  hasUserInteracted(): boolean {
+    return this.userInteractionOccurred;
   }
 }

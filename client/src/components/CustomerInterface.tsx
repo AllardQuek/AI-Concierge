@@ -174,6 +174,11 @@ const CustomerInterface: React.FC = () => {
       setError('');
       setCallState('requesting');
       
+      // Prepare mobile audio BEFORE getting user media
+      if (webrtcService.current) {
+        await webrtcService.current.ensureMobileAudioReady();
+      }
+      
       // Get user media first
       await webrtcService.current?.getUserMedia();
       
