@@ -25,7 +25,20 @@ const LandingPage: React.FC = () => {
   const localAudioRef = useRef<HTMLAudioElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
 
-  // Normalize phone number format for consistent storage and lookup
+  // Handle phone number input
+  const handlePhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setFriendNumber(value);
+  };
+
+  // Handle Enter key press to submit call
+  const handlePhoneNumberKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && friendNumber.trim()) {
+      handleCallFriend();
+    }
+  };
+
+  // Normalize and format phone number for consistent storage and display
   const normalizePhoneNumber = (phoneNumber: string): string => {
     // Remove all spaces, dashes, parentheses, and other formatting
     const digitsOnly = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
@@ -34,11 +47,36 @@ const LandingPage: React.FC = () => {
     const hasPlus = phoneNumber.trim().startsWith('+');
     const normalized = hasPlus ? `+${digitsOnly}` : digitsOnly;
     
-    // Format consistently: +CCNNNNNNNNN -> +CC NNN NNNN
+    // Format based on country code patterns
     if (normalized.startsWith('+') && normalized.length >= 8) {
       const countryAndNumber = normalized.substring(1); // Remove +
-      if (countryAndNumber.length >= 7) {
-        // For most numbers, format as: +CC NNN NNNN
+      
+      // Singapore (+65): Format as +65 XXXX XXXX (two groups of 4 digits)
+      if (countryAndNumber.startsWith('65') && countryAndNumber.length === 10) {
+        const phoneNumber = countryAndNumber.substring(2); // Remove 65
+        if (phoneNumber.length === 8) {
+          return `+65 ${phoneNumber.substring(0, 4)} ${phoneNumber.substring(4)}`;
+        }
+      }
+      
+      // US/Canada (+1): Format as +1 XXX XXX XXXX
+      else if (countryAndNumber.startsWith('1') && countryAndNumber.length === 11) {
+        const phoneNumber = countryAndNumber.substring(1); // Remove 1
+        if (phoneNumber.length === 10) {
+          return `+1 ${phoneNumber.substring(0, 3)} ${phoneNumber.substring(3, 6)} ${phoneNumber.substring(6)}`;
+        }
+      }
+      
+      // UK (+44): Format as +44 XXXX XXX XXX
+      else if (countryAndNumber.startsWith('44') && countryAndNumber.length >= 10) {
+        const phoneNumber = countryAndNumber.substring(2); // Remove 44
+        if (phoneNumber.length >= 8) {
+          return `+44 ${phoneNumber.substring(0, 4)} ${phoneNumber.substring(4, 7)} ${phoneNumber.substring(7)}`;
+        }
+      }
+      
+      // Default international format: +CC XXX XXXX (for other countries)
+      else if (countryAndNumber.length >= 7) {
         const countryCode = countryAndNumber.substring(0, 2);
         const remainingDigits = countryAndNumber.substring(2);
         
@@ -87,18 +125,14 @@ const LandingPage: React.FC = () => {
       return existingNumber;
     }
     
-    // Generate a new unique number for this session
-    const countries = [
-      { code: '+65', pattern: () => `${Math.random() > 0.5 ? '8' : '9'}${Array.from({length: 7}, () => Math.floor(Math.random() * 10)).join('')}` }, // Singapore
-      { code: '+1', pattern: () => `${Math.floor(Math.random() * 900) + 100}${Array.from({length: 7}, () => Math.floor(Math.random() * 10)).join('')}` }, // US/Canada
-      { code: '+44', pattern: () => `7${Array.from({length: 9}, () => Math.floor(Math.random() * 10)).join('')}` }, // UK
-      { code: '+61', pattern: () => `4${Array.from({length: 8}, () => Math.floor(Math.random() * 10)).join('')}` }, // Australia
-      { code: '+33', pattern: () => `6${Array.from({length: 8}, () => Math.floor(Math.random() * 10)).join('')}` }, // France
-    ];
+    // Generate a new unique Singapore number for this session
+    // Singapore mobile numbers start with 8 or 9 and have 8 digits total
+    const firstDigit = Math.random() > 0.5 ? '8' : '9';
+    const remainingDigits = Array.from({length: 7}, () => Math.floor(Math.random() * 10)).join('');
+    const number = firstDigit + remainingDigits;
     
-    const country = countries[Math.floor(Math.random() * countries.length)];
-    const number = country.pattern();
-    const formattedNumber = `${country.code} ${number.substring(0, 3)} ${number.substring(3)}`;
+    // Format as +65 XXXX XXXX (Singapore format)
+    const formattedNumber = `+65 ${number.substring(0, 4)} ${number.substring(4)}`;
     
     // Store in session storage for this tab
     sessionStorage.setItem(sessionKey, formattedNumber);
@@ -598,7 +632,8 @@ const LandingPage: React.FC = () => {
                 <input
                   type="text"
                   value={friendNumber}
-                  onChange={(e) => setFriendNumber(e.target.value)}
+                  onChange={handlePhoneNumberChange}
+                  onKeyPress={handlePhoneNumberKeyPress}
                   placeholder="Enter phone number"
                   className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-lg font-mono tracking-wider"
                   maxLength={20}
