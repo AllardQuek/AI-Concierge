@@ -275,9 +275,14 @@ const LandingPage: React.FC = () => {
 
   // Start call duration timer
   const startCallDurationTimer = () => {
+    console.log('⏱️ Starting call duration timer');
     setCallDuration(0);
     callDurationIntervalRef.current = window.setInterval(() => {
-      setCallDuration(prev => prev + 1);
+      setCallDuration(prev => {
+        const newDuration = prev + 1;
+        // console.log('⏱️ Timer tick:', newDuration); // Commented out to reduce log noise
+        return newDuration;
+      });
     }, 1000);
   };
 
@@ -352,6 +357,7 @@ const LandingPage: React.FC = () => {
       if (webrtcRef.current) {
         await webrtcRef.current.setRemoteAnswer(answer);
         setCallState('connected');
+        startCallDurationTimer(); // Start the timer when call is answered
         clearTimeout(callTimeoutRef.current!); // Clear connection timeout
       }
     });

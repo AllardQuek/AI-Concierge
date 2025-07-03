@@ -18,6 +18,7 @@ const CallInterface: React.FC = () => {
   const [incomingCallerNumber, setIncomingCallerNumber] = useState('');
   const [callDuration, setCallDuration] = useState(0); // Call duration in seconds
   const [callStartTime, setCallStartTime] = useState<number | null>(null);
+  const [webrtcListenersSetup, setWebrtcListenersSetup] = useState(false);
   
   const webrtcRef = useRef<WebRTCService | null>(null);
   const socketRef = useRef<SocketService | null>(null);
@@ -113,7 +114,6 @@ const CallInterface: React.FC = () => {
       // Call just connected, start the timer
       const startTime = Date.now();
       setCallStartTime(startTime);
-      console.log('⏱️ Call timer started');
       
       callTimerRef.current = window.setInterval(() => {
         const elapsed = Math.floor((Date.now() - startTime) / 1000);
@@ -121,7 +121,6 @@ const CallInterface: React.FC = () => {
       }, 1000);
     } else if (callState !== 'connected' && callTimerRef.current) {
       // Call ended or not connected, stop the timer
-      console.log('⏱️ Call timer stopped');
       clearInterval(callTimerRef.current);
       callTimerRef.current = null;
       setCallStartTime(null);
@@ -261,11 +260,23 @@ const CallInterface: React.FC = () => {
 
     // Only set up response listeners, not the initial call listener
     socketRef.current.on('call-answered', async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
-      console.log('📞 Call was answered');
+      console.log('📞 Call was answered - processing answer...');
+      console.log('📞 Current call state before processing answer:', callState);
+      
       if (webrtcRef.current) {
-        await webrtcRef.current.setRemoteAnswer(answer);
-        setCallState('connected');
-        clearTimeout(callTimeoutRef.current!); // Clear connection timeout
+        try {
+          await webrtcRef.current.setRemoteAnswer(answer);
+          console.log('📞 Remote answer set successfully, updating UI to connected state');
+          setCallState('connected');
+          setError(''); // Clear any errors
+          clearTimeout(callTimeoutRef.current!); // Clear connection timeout
+          
+          // Debug WebRTC state after setting answer
+          webrtcRef.current.debugState();
+        } catch (error) {
+          console.error('📞 Error setting remote answer:', error);
+          setError('Failed to establish connection');
+        }
       }
     });
 
@@ -302,11 +313,23 @@ const CallInterface: React.FC = () => {
     });
 
     socketRef.current.on('call-answered', async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
-      console.log('📞 Call was answered');
+      console.log('📞 Call was answered - processing answer...');
+      console.log('📞 Current call state before processing answer:', callState);
+      
       if (webrtcRef.current) {
-        await webrtcRef.current.setRemoteAnswer(answer);
-        setCallState('connected');
-        clearTimeout(callTimeoutRef.current!); // Clear connection timeout
+        try {
+          await webrtcRef.current.setRemoteAnswer(answer);
+          console.log('📞 Remote answer set successfully, updating UI to connected state');
+          setCallState('connected');
+          setError(''); // Clear any errors
+          clearTimeout(callTimeoutRef.current!); // Clear connection timeout
+          
+          // Debug WebRTC state after setting answer
+          webrtcRef.current.debugState();
+        } catch (error) {
+          console.error('📞 Error setting remote answer:', error);
+          setError('Failed to establish connection');
+        }
       }
     });
 
@@ -329,12 +352,29 @@ const CallInterface: React.FC = () => {
 
   const setupWebRTCListeners = () => {
     if (!webrtcRef.current) return;
+    
+    // Prevent setting up listeners multiple times
+    if (webrtcListenersSetup) {
+      console.log('🔗 WebRTC listeners already set up, skipping...');
+      return;
+    }
+    
+    console.log('🔗 Setting up WebRTC listeners...');
+    setWebrtcListenersSetup(true);
 
     webrtcRef.current.onConnectionStateChange((state: string) => {
-      console.log('🔗 WebRTC connection state:', state);
+      console.log('🔗 WebRTC connection state changed to:', state);
+      console.log('🔗 Current call state:', callState);
       
       if (state === 'connected') {
-        setCallState('connected');
+        // Only update to connected if we're not already connected
+        // This prevents overriding the socket-driven state changes
+        if (callState !== 'connected') {
+          console.log('🔗 WebRTC connected - updating call state to connected');
+          setCallState('connected');
+        } else {
+          console.log('🔗 WebRTC connected - call state already connected, no change needed');
+        }
         setError(''); // Clear any previous errors
         // Clear connection timeout since we're now connected
         if (callTimeoutRef.current) {
@@ -348,7 +388,13 @@ const CallInterface: React.FC = () => {
           setError('Connection lost');
         }
       } else if (state === 'connecting') {
-        setCallState('connecting');
+        // Only set to connecting if we're not already connected or in the process of connecting
+        if (callState !== 'connected' && callState !== 'connecting') {
+          console.log('🔗 WebRTC connecting - updating call state');
+          setCallState('connecting');
+        } else {
+          console.log('🔗 WebRTC connecting - but call state is', callState, '- not changing');
+        }
       }
     });
 
@@ -493,6 +539,9 @@ const CallInterface: React.FC = () => {
     // Reset timer state
     setCallDuration(0);
     setCallStartTime(null);
+    
+    // Reset WebRTC listeners flag
+    setWebrtcListenersSetup(false);
     
     // Clean up WebRTC
     if (webrtcRef.current) {
