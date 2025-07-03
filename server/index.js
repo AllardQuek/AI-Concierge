@@ -36,12 +36,10 @@ const io = socketIo(server, {
   transports: ['websocket', 'polling']
 });
 
-// Store active rooms, users, agents, and customers
-const rooms = new Map();
-const users = new Map();
-const agents = new Map(); // Available agents
-const customers = new Map(); // Waiting customers
-const activeCalls = new Map(); // Active customer-agent calls
+// Store peer-to-peer connections globally
+const peerCodeMap = new Map(); // Map<userCode, socketId>
+const activeP2PCalls = new Map(); // Map<callerCode, { targetCode, callId }>
+const users = new Map(); // For peer connections tracking
 
 app.use(express.json());
 
@@ -49,10 +47,28 @@ app.use(express.json());
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'Server is running', 
-    rooms: rooms.size, 
     users: users.size,
     timestamp: new Date().toISOString(),
     corsOrigins: allowedOrigins
+  });
+});
+
+// Debug endpoint to inspect server state
+app.get('/debug', (req, res) => {
+  const registeredNumbers = Array.from(peerCodeMap.keys());
+  const activeCalls = Array.from(activeP2PCalls.entries()).map(([caller, data]) => ({
+    caller,
+    target: data.targetCode,
+    callId: data.callId
+  }));
+  
+  res.json({
+    timestamp: new Date().toISOString(),
+    registeredNumbers: registeredNumbers,
+    registeredCount: registeredNumbers.length,
+    activeCalls: activeCalls,
+    activeCallsCount: activeCalls.length,
+    connectedSockets: io.engine.clientsCount
   });
 });
 
@@ -60,370 +76,124 @@ app.get('/health', (req, res) => {
 io.on('connection', (socket) => {
   console.log(`User connected: ${socket.id}`);
 
-  // Agent login
-  socket.on('agent-login', ({ agentName }) => {
+  // ========== PEER-TO-PEER CALL HANDLERS ==========
+
+  // Join room with user code (for P2P calling)
+  socket.on('join-room', ({ username }) => {
     try {
-      const agent = {
+      const userCode = username; // username is actually the user's code
+      console.log(`User ${socket.id} joining room with code: ${userCode}`);
+      
+      // Map the user code to socket ID
+      peerCodeMap.set(userCode, socket.id);
+      
+      // Store user info
+      users.set(socket.id, {
         id: socket.id,
-        name: agentName,
-        status: 'available',
-        loginTime: new Date()
-      };
-      
-      agents.set(socket.id, agent);
-      users.set(socket.id, { ...agent, type: 'agent' });
-      
-      console.log(`Agent ${agentName} logged in: ${socket.id}`);
-      
-      socket.emit('agent-logged-in', { agent });
-      
-    } catch (error) {
-      console.error('Error in agent login:', error);
-      socket.emit('error', { message: 'Failed to login as agent' });
-    }
-  });
-
-  // Agent status change
-  socket.on('agent-status-change', ({ status }) => {
-    try {
-      const agent = agents.get(socket.id);
-      if (agent) {
-        agent.status = status;
-        console.log(`Agent ${agent.name} status changed to: ${status}`);
-      }
-    } catch (error) {
-      console.error('Error changing agent status:', error);
-    }
-  });
-
-  // Customer request call
-  socket.on('customer-request-call', ({ customerName }) => {
-    try {
-      const customer = {
-        id: socket.id,
-        name: customerName,
-        requestTime: new Date()
-      };
-      
-      customers.set(socket.id, customer);
-      users.set(socket.id, { ...customer, type: 'customer' });
-      
-      console.log(`Customer ${customerName} requesting call: ${socket.id}`);
-      
-      // Find available agent
-      const availableAgent = Array.from(agents.values())
-        .find(agent => agent.status === 'available');
-      
-      if (availableAgent) {
-        // Notify agent of incoming call
-        io.to(availableAgent.id).emit('incoming-call', {
-          customerName: customer.name,
-          customerId: customer.id
-        });
-        
-        socket.emit('agent-available');
-        console.log(`Notified agent ${availableAgent.name} of incoming call from ${customerName}`);
-      } else {
-        socket.emit('no-agents-available');
-        console.log(`No agents available for customer ${customerName}`);
-      }
-      
-    } catch (error) {
-      console.error('Error in customer call request:', error);
-      socket.emit('error', { message: 'Failed to request call' });
-    }
-  });
-
-  // Agent accept call
-  socket.on('agent-accept-call', ({ customerId }) => {
-    try {
-      const agent = agents.get(socket.id);
-      const customer = customers.get(customerId);
-      
-      if (agent && customer) {
-        // Create active call
-        const call = {
-          customerId: customer.id,
-          agentId: agent.id,
-          startTime: new Date()
-        };
-        
-        activeCalls.set(customer.id, call);
-        
-        // Update agent status
-        agent.status = 'busy';
-        
-        // Notify customer that call was accepted
-        io.to(customer.id).emit('call-accepted');
-        
-        console.log(`Agent ${agent.name} accepted call from ${customer.name}`);
-      }
-      
-    } catch (error) {
-      console.error('Error accepting call:', error);
-      socket.emit('error', { message: 'Failed to accept call' });
-    }
-  });
-
-  // Agent decline call
-  socket.on('agent-decline-call', ({ customerId }) => {
-    try {
-      const agent = agents.get(socket.id);
-      const customer = customers.get(customerId);
-      
-      if (agent && customer) {
-        // Notify customer that call was declined
-        io.to(customer.id).emit('call-declined');
-        
-        console.log(`Agent ${agent.name} declined call from ${customer.name}`);
-        
-        // Try to find another available agent
-        const anotherAgent = Array.from(agents.values())
-          .find(a => a.status === 'available' && a.id !== agent.id);
-        
-        if (anotherAgent) {
-          io.to(anotherAgent.id).emit('incoming-call', {
-            customerName: customer.name,
-            customerId: customer.id
-          });
-        } else {
-          io.to(customer.id).emit('no-agents-available');
-        }
-      }
-      
-    } catch (error) {
-      console.error('Error declining call:', error);
-    }
-  });
-
-  // Customer end call
-  socket.on('customer-end-call', () => {
-    try {
-      const customer = customers.get(socket.id);
-      if (customer) {
-        const call = activeCalls.get(customer.id);
-        if (call) {
-          // Notify agent
-          io.to(call.agentId).emit('customer-disconnected');
-          
-          // Update agent status back to available
-          const agent = agents.get(call.agentId);
-          if (agent) {
-            agent.status = 'available';
-          }
-          
-          activeCalls.delete(customer.id);
-          console.log(`Customer ${customer.name} ended call`);
-        }
-      }
-    } catch (error) {
-      console.error('Error ending customer call:', error);
-    }
-  });
-
-  // Agent end call
-  socket.on('agent-end-call', ({ customerId }) => {
-    try {
-      const agent = agents.get(socket.id);
-      const call = activeCalls.get(customerId);
-      
-      if (agent && call) {
-        // Notify customer
-        io.to(customerId).emit('agent-disconnected');
-        
-        // Update agent status back to available
-        agent.status = 'available';
-        
-        activeCalls.delete(customerId);
-        console.log(`Agent ${agent.name} ended call`);
-      }
-    } catch (error) {
-      console.error('Error ending agent call:', error);
-    }
-  });
-
-  // Handle user joining a room
-  socket.on('join-room', ({ username, roomId }) => {
-    try {
-      // Generate room ID if not provided
-      const finalRoomId = roomId || uuidv4();
-      
-      // Check if room exists and has space
-      if (rooms.has(finalRoomId) && rooms.get(finalRoomId).users.length >= 2) {
-        socket.emit('room-full');
-        return;
-      }
-
-      // Create room if it doesn't exist
-      if (!rooms.has(finalRoomId)) {
-        rooms.set(finalRoomId, {
-          id: finalRoomId,
-          users: [],
-          createdAt: new Date()
-        });
-      }
-
-      const room = rooms.get(finalRoomId);
-      const user = {
-        id: socket.id,
-        username: username || `User-${socket.id.substring(0, 6)}`,
-        joinedAt: new Date()
-      };
-
-      // Add user to room and socket room
-      room.users.push(user);
-      users.set(socket.id, { ...user, roomId: finalRoomId });
-      socket.join(finalRoomId);
-
-      console.log(`User ${user.username} joined room ${finalRoomId}`);
-
-      // Notify user of successful join
-      socket.emit('room-joined', {
-        roomId: finalRoomId,
-        user: user,
-        roomUsers: room.users
+        username: userCode,
+        code: userCode,
+        type: 'peer',
+        joinTime: new Date()
       });
-
-      // Notify other users in the room
-      socket.to(finalRoomId).emit('user-joined', {
-        user: user,
-        roomUsers: room.users
-      });
-
-      // If this is the second user, both can start the call
-      if (room.users.length === 2) {
-        io.to(finalRoomId).emit('room-ready', {
-          roomUsers: room.users
-        });
-      }
-
+      
+      socket.join(userCode); // Join a room with their code
+      console.log(`User ${socket.id} joined room ${userCode}`);
+      
     } catch (error) {
-      console.error('Error joining room:', error);
+      console.error('Error joining P2P room:', error);
       socket.emit('error', { message: 'Failed to join room' });
     }
   });
 
-  // Handle WebRTC signaling (updated for role-based system)
-  socket.on('offer', ({ offer, targetUserId }) => {
-    console.log(`Offer from ${socket.id} to ${targetUserId || 'auto-detect'}`);
-    console.log('Current active calls:', Array.from(activeCalls.entries()));
-    console.log('Current users:', Array.from(users.entries()));
-    
-    // Auto-detect target based on active call relationship
-    const user = users.get(socket.id);
-    let actualTargetId = null;
-    
-    console.log(`User sending offer: ${user?.type} (${socket.id})`);
-    
-    if (user && user.type === 'agent') {
-      // Agent sending offer to customer
-      const call = Array.from(activeCalls.values())
-        .find(call => call.agentId === socket.id);
-      if (call) {
-        actualTargetId = call.customerId;
-        console.log(`Found call for agent, target customer: ${actualTargetId}`);
-      } else {
-        console.log('No active call found for agent');
-      }
-    } else if (user && user.type === 'customer') {
-      // Customer sending offer to agent
-      const call = activeCalls.get(socket.id);
-      if (call) {
-        actualTargetId = call.agentId;
-        console.log(`Found call for customer, target agent: ${actualTargetId}`);
-      } else {
-        console.log('No active call found for customer');
-      }
-    }
-    
-    if (actualTargetId) {
-      console.log(`Routing offer from ${socket.id} to ${actualTargetId}`);
-      socket.to(actualTargetId).emit('offer', {
-        offer,
-        fromUserId: socket.id
-      });
-    } else {
-      console.log(`No active call found for offer from ${socket.id}`);
-    }
-  });
-
-  socket.on('answer', ({ answer, targetUserId }) => {
-    console.log(`Answer from ${socket.id} to ${targetUserId || 'auto-detect'}`);
-    
-    // Auto-detect target based on active call relationship
-    const user = users.get(socket.id);
-    let actualTargetId = null;
-    
-    if (user && user.type === 'agent') {
-      // Agent sending answer to customer
-      const call = Array.from(activeCalls.values())
-        .find(call => call.agentId === socket.id);
-      if (call) {
-        actualTargetId = call.customerId;
-      }
-    } else if (user && user.type === 'customer') {
-      // Customer sending answer to agent
-      const call = activeCalls.get(socket.id);
-      if (call) {
-        actualTargetId = call.agentId;
-      }
-    }
-    
-    if (actualTargetId) {
-      console.log(`Routing answer from ${socket.id} to ${actualTargetId}`);
-      socket.to(actualTargetId).emit('answer', {
-        answer,
-        fromUserId: socket.id
-      });
-    } else {
-      console.log(`No active call found for answer from ${socket.id}`);
-    }
-  });
-
-  socket.on('ice-candidate', ({ candidate, targetUserId }) => {
-    console.log(`ICE candidate from ${socket.id} to ${targetUserId || 'auto-detect'}`);
-    
-    // Auto-detect target based on active call relationship
-    const user = users.get(socket.id);
-    let actualTargetId = null;
-    
-    if (user && user.type === 'agent') {
-      // Agent sending ICE candidate to customer
-      const call = Array.from(activeCalls.values())
-        .find(call => call.agentId === socket.id);
-      if (call) {
-        actualTargetId = call.customerId;
-      }
-    } else if (user && user.type === 'customer') {
-      // Customer sending ICE candidate to agent
-      const call = activeCalls.get(socket.id);
-      if (call) {
-        actualTargetId = call.agentId;
-      }
-    }
-    
-    if (actualTargetId) {
-      console.log(`Routing ICE candidate from ${socket.id} to ${actualTargetId}`);
-      socket.to(actualTargetId).emit('ice-candidate', {
-        candidate,
-        fromUserId: socket.id
-      });
-    } else {
-      console.log(`No active call found for ICE candidate from ${socket.id}`);
-    }
-  });
-
-  // Handle mute/unmute status
-  socket.on('audio-status', ({ isMuted }) => {
-    const user = users.get(socket.id);
-    if (user) {
-      const room = rooms.get(user.roomId);
-      if (room) {
-        socket.to(user.roomId).emit('user-audio-status', {
-          userId: socket.id,
-          isMuted
+  // Handle peer-to-peer call initiation
+  socket.on('call-user', ({ targetCode, callerCode, offer }) => {
+    try {
+      console.log(`Call request from ${callerCode} to ${targetCode}`);
+      
+      const targetSocketId = peerCodeMap.get(targetCode);
+      
+      if (targetSocketId) {
+        // Store the active call
+        const callId = uuidv4();
+        activeP2PCalls.set(callerCode, { targetCode, callId, callerSocketId: socket.id });
+        
+        // Notify the target user about incoming call with offer
+        io.to(targetSocketId).emit('user-calling', { 
+          callerCode, 
+          offer: offer // Forward the WebRTC offer
         });
+        
+        console.log(`Notified ${targetCode} about incoming call from ${callerCode} with offer`);
+      } else {
+        // Target user not found or offline
+        socket.emit('call-declined');
+        console.log(`Target user ${targetCode} not found`);
       }
+      
+    } catch (error) {
+      console.error('Error handling call-user:', error);
+      socket.emit('error', { message: 'Failed to initiate call' });
+    }
+  });
+
+  // Handle call answer
+  socket.on('answer-call', ({ callerCode, answer }) => {
+    try {
+      console.log(`Call answered by ${socket.id} for caller ${callerCode}`);
+      
+      const callerSocketId = peerCodeMap.get(callerCode);
+      
+      if (callerSocketId) {
+        // Send the answer back to the caller
+        io.to(callerSocketId).emit('call-answered', { answer });
+        console.log(`Answer sent to ${callerCode}`);
+      } else {
+        console.log(`Caller ${callerCode} not found when answering`);
+      }
+      
+    } catch (error) {
+      console.error('Error handling answer-call:', error);
+    }
+  });
+
+  // Handle call decline
+  socket.on('decline-call', ({ callerCode }) => {
+    try {
+      console.log(`Call declined by ${socket.id} for caller ${callerCode}`);
+      
+      const callerSocketId = peerCodeMap.get(callerCode);
+      
+      if (callerSocketId) {
+        io.to(callerSocketId).emit('call-declined');
+        console.log(`Decline notification sent to ${callerCode}`);
+      }
+      
+      // Clean up the call record
+      activeP2PCalls.delete(callerCode);
+      
+    } catch (error) {
+      console.error('Error handling decline-call:', error);
+    }
+  });
+
+  // Handle call end
+  socket.on('end-call', ({ targetCode, callerCode }) => {
+    try {
+      console.log(`Call ended between ${callerCode} and ${targetCode}`);
+      
+      // Notify the other party that the call ended
+      const targetSocketId = peerCodeMap.get(targetCode);
+      if (targetSocketId) {
+        io.to(targetSocketId).emit('call-ended', { fromCode: callerCode });
+        console.log(`Call end notification sent to ${targetCode}`);
+      }
+      
+      // Clean up the call record
+      activeP2PCalls.delete(callerCode);
+      activeP2PCalls.delete(targetCode); // Clean up both directions
+      
+    } catch (error) {
+      console.error('Error handling end-call:', error);
     }
   });
 
@@ -433,62 +203,23 @@ io.on('connection', (socket) => {
     
     const user = users.get(socket.id);
     if (user) {
-      if (user.type === 'agent') {
-        // Agent disconnected
-        const agent = agents.get(socket.id);
-        if (agent) {
-          console.log(`Agent ${agent.name} disconnected`);
-          
-          // Find any active calls with this agent
-          const activeCalls_array = Array.from(activeCalls.entries());
-          for (const [customerId, call] of activeCalls_array) {
-            if (call.agentId === socket.id) {
-              // Notify customer that agent disconnected
-              io.to(customerId).emit('agent-disconnected');
-              activeCalls.delete(customerId);
+      // Handle peer-to-peer disconnection cleanup
+      if (user.type === 'peer' && user.code) {
+        console.log(`Peer ${user.code} disconnected`);
+        
+        // Remove from peer code map
+        peerCodeMap.delete(user.code);
+        
+        // Clean up any active P2P calls involving this user
+        for (const [callerCode, call] of activeP2PCalls.entries()) {
+          if (call.targetCode === user.code || callerCode === user.code) {
+            // Notify the other party that the call ended
+            const otherCode = call.targetCode === user.code ? callerCode : call.targetCode;
+            const otherSocketId = peerCodeMap.get(otherCode);
+            if (otherSocketId) {
+              io.to(otherSocketId).emit('call-ended', { fromCode: user.code });
             }
-          }
-          
-          agents.delete(socket.id);
-        }
-      } else if (user.type === 'customer') {
-        // Customer disconnected
-        const customer = customers.get(socket.id);
-        if (customer) {
-          console.log(`Customer ${customer.name} disconnected`);
-          
-          // Find active call
-          const call = activeCalls.get(socket.id);
-          if (call) {
-            // Notify agent that customer disconnected
-            io.to(call.agentId).emit('customer-disconnected');
-            
-            // Update agent status back to available
-            const agent = agents.get(call.agentId);
-            if (agent) {
-              agent.status = 'available';
-            }
-            
-            activeCalls.delete(socket.id);
-          }
-          
-          customers.delete(socket.id);
-        }
-      } else {
-        // Legacy room-based system
-        const room = rooms.get(user.roomId);
-        if (room) {
-          room.users = room.users.filter(u => u.id !== socket.id);
-          
-          socket.to(user.roomId).emit('user-left', {
-            userId: socket.id,
-            username: user.username,
-            roomUsers: room.users
-          });
-
-          if (room.users.length === 0) {
-            rooms.delete(user.roomId);
-            console.log(`Room ${user.roomId} deleted - no users remaining`);
+            activeP2PCalls.delete(callerCode);
           }
         }
       }
@@ -497,24 +228,10 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Handle manual leave room
+  // Handle manual leave room (legacy - can be removed if not needed)
   socket.on('leave-room', () => {
     const user = users.get(socket.id);
-    if (user) {
-      socket.leave(user.roomId);
-      const room = rooms.get(user.roomId);
-      if (room) {
-        room.users = room.users.filter(u => u.id !== socket.id);
-        socket.to(user.roomId).emit('user-left', {
-          userId: socket.id,
-          username: user.username,
-          roomUsers: room.users
-        });
-        
-        if (room.users.length === 0) {
-          rooms.delete(user.roomId);
-        }
-      }
+    if (user && user.type === 'peer') {
       users.delete(socket.id);
       socket.emit('left-room');
     }

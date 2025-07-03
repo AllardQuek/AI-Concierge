@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Call</title>
+</head>
+<body>
+    <h1>Test Call Interface</h1>
+    <p>Use this to test calling functionality</p>
+    
+    <div>
+        <label>Target Number:</label>
+        <input type="text" id="targetNumber" placeholder="+44 702 2434910" style="width: 200px;">
+        <button onclick="makeCall()">Make Call</button>
+    </div>
+    
+    <div id="log" style="margin-top: 20px; font-family: monospace; white-space: pre-wrap;"></div>
+
+    <script>
+        function log(message) {
+            const logDiv = document.getElementById('log');
+            logDiv.textContent += new Date().toISOString() + ': ' + message + '\n';
+        }
+        
+        function makeCall() {
+            const targetNumber = document.getElementById('targetNumber').value;
+            if (!targetNumber) {
+                log('Please enter a target number');
+                return;
+            }
+            
+            // Simulate going to call interface
+            const callUrl = `http://localhost:3000/call?to=${encodeURIComponent(targetNumber)}`;
+            log(`Opening call interface: ${callUrl}`);
+            window.open(callUrl, '_blank');
+        }
+        
+        log('Test call interface loaded');
+    </script>
+</body>
+</html>

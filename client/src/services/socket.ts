@@ -1,44 +1,20 @@
 import { io, Socket } from 'socket.io-client';
 
-export interface User {
-  id: string;
-  username: string;
-  joinedAt: Date;
-}
-
-export interface Room {
-  id: string;
-  users: User[];
-  createdAt: Date;
-}
-
 export interface SocketEvents {
-  // Room events (legacy)
-  'room-joined': (data: { roomId: string; user: User; roomUsers: User[] }) => void;
-  'room-ready': (data: { roomUsers: User[] }) => void;
-  'room-full': () => void;
-  'user-joined': (data: { user: User; roomUsers: User[] }) => void;
-  'user-left': (data: { userId: string; username: string; roomUsers: User[] }) => void;
-  'left-room': () => void;
-  
-  // Customer events
-  'agent-available': () => void;
-  'call-accepted': () => void;
-  'call-declined': () => void;
-  'agent-disconnected': () => void;
-  'no-agents-available': () => void;
-  
-  // Agent events
-  'incoming-call': (data: { customerName: string; customerId: string }) => void;
-  'customer-disconnected': () => void;
+  // Peer-to-peer call events
+  'call-user': (data: { targetCode: string; callerCode: string; offer?: RTCSessionDescriptionInit }) => void;
+  'user-calling': (data: { callerCode: string; offer?: RTCSessionDescriptionInit }) => void;
+  'call-answered': (data: { answer: RTCSessionDescriptionInit }) => void;
+  'answer-call': (data: { callerCode: string; answer: RTCSessionDescriptionInit }) => void;
+  'call-declined': () => void;  // No data sent from server
+  'decline-call': (data: { callerCode: string }) => void;
+  'call-ended': (data: { fromCode: string }) => void;
+  'end-call': (data: { targetCode: string; callerCode: string }) => void;
   
   // WebRTC signaling events
   'offer': (data: { offer: RTCSessionDescriptionInit; fromUserId: string }) => void;
   'answer': (data: { answer: RTCSessionDescriptionInit; fromUserId: string }) => void;
   'ice-candidate': (data: { candidate: RTCIceCandidateInit; fromUserId: string }) => void;
-  
-  // Audio status events
-  'user-audio-status': (data: { userId: string; isMuted: boolean }) => void;
   
   // Connection events
   'connect': () => void;
@@ -163,7 +139,13 @@ export class SocketService {
   // Join a room
   joinRoom(username: string, roomId?: string): void {
     if (this.socket) {
-      this.socket.emit('join-room', { username, roomId });
+      if (roomId) {
+        // Traditional room join with room ID
+        this.socket.emit('join-room', { username, roomId });
+      } else {
+        // P2P join with just username (user code)
+        this.socket.emit('join-room', { username });
+      }
     }
   }
 

@@ -22,7 +22,7 @@ export const ConnectionStatus: React.FC<ConnectionStatusProps> = ({
       }`}></div>
       <span className="text-sm">
         {connectionState === 'connected' ? 'Connected' : 
-         connectionState === 'connecting' ? 'Reconnecting...' : 'Connection Lost'}
+         connectionState === 'connecting' ? 'Connecting...' : 'Connection Lost'}
       </span>
     </div>
   );

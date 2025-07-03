@@ -2,30 +2,32 @@
 
 ## 🎯 Project Overview
 
-**Sybil** is an AI-enhanced voice conversation platform that combines ultra-low latency WebRTC voice communication with real-time LLM-powered assistance. Named after the prophetic oracles of ancient Greece, Sybil provides intelligent insights and action recommendations during live voice conversations.
+**Sybil** is an AI-enhanced voice conversation platform that provides peer-to-peer voice communication using phone number codes. Named after the prophetic oracles of ancient Greece, Sybil enables direct voice calling between users with a clean, modern interface.
 
 ## 📊 Implementation Status
 
 ### ✅ **COMPLETED FEATURES**
 
 #### Core Voice Platform
-- **WebRTC P2P Voice Communication** - Ultra-low latency (30-50ms) between customer and agent
+- **WebRTC P2P Voice Communication** - Ultra-low latency (30-50ms) between peers
 - **Socket.IO Signaling Server** - Real-time WebRTC negotiation and session management
+- **Phone Number Based Calling** - Users call each other using unique phone number codes
 - **Modern React Frontend** - TypeScript-based with Tailwind CSS styling
-- **Role-Based Interfaces** - Separate customer and agent experiences
+- **Clean Call Interface** - Streamlined calling experience with mute/unmute controls
 
-#### AI Integration Framework
-- **AI Service Architecture** - Complete server-side AI processing hub (Port 5001)
-- **OpenAI GPT-4o Integration** - Real-time conversation analysis and insights
-- **AudioWorklet Processor** - Low-latency audio chunking and processing
-- **AI Dashboard Component** - Live insights, sentiment, and action recommendations
-- **Action Recommendation Engine** - Contextual suggestions for agents
+### 🔮 **FUTURE ENHANCEMENT OPPORTUNITIES**
 
-### 🚧 **PENDING ACTIVATION**
+#### AI Integration Framework (Optional)
+- **AI Service Architecture** - Server-side AI processing for conversation analysis
+- **OpenAI Integration** - Real-time conversation insights and recommendations
+- **Audio Analysis** - Voice sentiment and conversation flow analysis
+- **Smart Recommendations** - Contextual suggestions during calls
+
+### � **NEXT STEPS FOR AI INTEGRATION**
 
 #### Configuration & Connection
 - **API Key Setup** - OpenAI and Azure Speech Services configuration
-- **Audio Pipeline Connection** - Link AudioWorklet to AI service
+- **Audio Pipeline Connection** - Link audio processing to AI service
 - **Real-time Data Flow** - Connect transcription to dashboard updates
 - **End-to-End Testing** - Validate complete AI-enhanced call flow
 
