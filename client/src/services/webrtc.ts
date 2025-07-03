@@ -578,14 +578,47 @@ export class WebRTCService {
     // Add to DOM for mobile compatibility
     document.body.appendChild(this.remoteAudioElement);
 
-    // Add event listeners for debugging
-    this.remoteAudioElement.addEventListener('loadstart', () => console.log('WebRTC: Remote audio loadstart'));
-    this.remoteAudioElement.addEventListener('loadeddata', () => console.log('WebRTC: Remote audio loadeddata'));
-    this.remoteAudioElement.addEventListener('canplay', () => console.log('WebRTC: Remote audio canplay'));
-    this.remoteAudioElement.addEventListener('play', () => console.log('WebRTC: Remote audio play'));
-    this.remoteAudioElement.addEventListener('playing', () => console.log('WebRTC: Remote audio playing'));
-    this.remoteAudioElement.addEventListener('pause', () => console.log('WebRTC: Remote audio pause'));
-    this.remoteAudioElement.addEventListener('error', (e) => console.error('WebRTC: Remote audio error:', e));
+    // Enhanced event listeners for debugging audio issues
+    // this.remoteAudioElement.addEventListener('loadstart', () => {
+    //   console.log('🔊 Remote audio: loadstart');
+    // });
+    
+    // this.remoteAudioElement.addEventListener('loadeddata', () => {
+    //   console.log('🔊 Remote audio: loadeddata');
+    // });
+    
+    // this.remoteAudioElement.addEventListener('canplay', () => {
+    //   console.log('🔊 Remote audio: canplay - attempting autoplay...');
+    //   this.playRemoteAudio();
+    // });
+    
+    // this.remoteAudioElement.addEventListener('play', () => {
+    //   console.log('✅ Remote audio: playing successfully');
+    // });
+    
+    // this.remoteAudioElement.addEventListener('playing', () => {
+    //   console.log('✅ Remote audio: playing event fired');
+    // });
+    
+    // this.remoteAudioElement.addEventListener('pause', () => {
+    //   console.log('⏸️ Remote audio: paused');
+    // });
+    
+    // this.remoteAudioElement.addEventListener('error', (e) => {
+    //   console.error('❌ Remote audio error:', e);
+    // });
+    
+    // this.remoteAudioElement.addEventListener('stalled', () => {
+    //   console.warn('⚠️ Remote audio: stalled');
+    // });
+    
+    // Android Chrome specific: Force play after small delay
+    // if (this.isAndroidChrome()) {
+    //   console.log('📱 Android Chrome detected - applying audio fixes...');
+    //   setTimeout(() => {
+    //     this.playRemoteAudio();
+    //   }, 500);
+    // }
 
     // Handle audio play promise for mobile
     this.playRemoteAudio();
@@ -595,24 +628,41 @@ export class WebRTCService {
   private async playRemoteAudio() {
     if (!this.remoteAudioElement) return;
 
-    console.log('WebRTC: Attempting to play remote audio...');
-    console.log('WebRTC: User interaction occurred:', this.userInteractionOccurred);
-    console.log('WebRTC: Audio context state:', this.audioContext?.state || 'None');
+    // const deviceType = this.getDeviceType();
+    // console.log(`🔊 Attempting to play remote audio on ${deviceType}...`);
+    // console.log('🔊 User interaction occurred:', this.userInteractionOccurred);
+    // console.log('🔊 Audio context state:', this.audioContext?.state || 'None');
+    // console.log('🔊 Audio element ready state:', this.remoteAudioElement.readyState);
+    // console.log('🔊 Audio element volume:', this.remoteAudioElement.volume);
+    // console.log('🔊 Audio element muted:', this.remoteAudioElement.muted);
 
     try {
       // Always try to resume audio context first (crucial for iOS)
       if (this.audioContext && this.audioContext.state === 'suspended') {
-        console.log('WebRTC: Resuming suspended audio context...');
+        console.log('🔊 Resuming suspended audio context...');
         await this.audioContext.resume();
       }
 
+      // Android Chrome specific fixes
+      // if (this.isAndroidChrome()) {
+      //   console.log('📱 Applying Android Chrome audio fixes...');
+      //   // Force volume and unmute
+      //   this.remoteAudioElement.volume = 1.0;
+      //   this.remoteAudioElement.muted = false;
+        
+      //   // Try to trigger user interaction if needed
+      //   if (!this.userInteractionOccurred) {
+      //     console.log('⚠️ No user interaction yet on Android - may need manual trigger');
+      //   }
+      // }
+
       // Force play the audio element
-      console.log('WebRTC: Attempting to play audio element...');
+      console.log('🔊 Attempting to play audio element...');
       const playPromise = this.remoteAudioElement.play();
       
       if (playPromise !== undefined) {
         await playPromise;
-        console.log('WebRTC: Remote audio started playing successfully');
+        console.log('✅ Remote audio started playing successfully');
         return;
       }
       
@@ -709,20 +759,20 @@ export class WebRTCService {
       }
       
       // Pre-create a silent audio element to "unlock" audio on iOS
-      const silentAudio = document.createElement('audio');
-      silentAudio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjMyLjEwNAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4OD//////////////////8AAAAATGF2YzU4LjU1AAAAAAAAAAAAAAAAJAAAAAAAAAAAASDb3AgAAAAAAPf/w4QAAAAAAAAAAAAAAAAAAAAAAAAASVREAAAAAAAfxJeaAAABkklEQVR4nGNgGAWjYBSMglEwCkbBKBgFo2AUjIJRMApGwSgYBaNgFIyC/w0AcJhjAAAQAAAAA//8Q==';
-      silentAudio.volume = 0.01;
-      silentAudio.muted = true;
+      // const silentAudio = document.createElement('audio');
+      // silentAudio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjMyLjEwNAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4OD//////////////////8AAAAATGF2YzU4LjU1AAAAAAAAAAAAAAAAJAAAAAAAAAAAASDb3AgAAAAAAPf/w4QAAAAAAAAAAAAAAAAAAAAAAAAASVREAAAAAAAfxJeaAAABkklEQVR4nGNgGAWjYBSMglEwCkbBKBgFo2AUjIJRMApGwSgYBaNgFIyC/w0AcJhjAAAQAAAAA//8Q==';
+      // silentAudio.volume = 0.01;
+      // silentAudio.muted = true;
       
-      try {
-        await silentAudio.play();
-        console.log('WebRTC: iOS silent audio played successfully');
-      } catch (error) {
-        console.warn('WebRTC: iOS silent audio play failed:', error);
-      }
+      // try {
+      //   await silentAudio.play();
+      //   console.log('WebRTC: iOS silent audio played successfully');
+      // } catch (error) {
+      //   console.warn('WebRTC: iOS silent audio play failed:', error);
+      // }
       
-      // Clean up silent audio
-      silentAudio.remove();
+      // // Clean up silent audio
+      // silentAudio.remove();
       
     } catch (error) {
       console.warn('WebRTC: iOS call preparation failed:', error);
@@ -736,6 +786,28 @@ export class WebRTCService {
     const isSafari = /Safari/.test(userAgent) && !/Chrome/.test(userAgent);
     return isIOS && isSafari;
   }
+
+  // // Check if running on Android Chrome
+  // private isAndroidChrome(): boolean {
+  //   const userAgent = navigator.userAgent;
+  //   const isAndroid = /Android/.test(userAgent);
+  //   const isChrome = /Chrome/.test(userAgent) && !/Edge/.test(userAgent);
+  //   return isAndroid && isChrome;
+  // }
+
+  // // Check if running on mobile device
+  // private isMobile(): boolean {
+  //   const userAgent = navigator.userAgent;
+  //   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+  // }
+
+  // // Get device type for logging
+  // private getDeviceType(): string {
+  //   if (this.isIOSSafari()) return 'iOS Safari';
+  //   if (this.isAndroidChrome()) return 'Android Chrome';
+  //   if (this.isMobile()) return 'Mobile (Other)';
+  //   return 'Desktop';
+  // }
 
   // Get mobile-optimized audio constraints
   private getMobileAudioConstraints(): MediaTrackConstraints {

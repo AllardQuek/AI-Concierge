@@ -161,12 +161,21 @@ const LandingPage: React.FC = () => {
 
       // Initialize socket connection to be always available for calls
       try {
+        console.log(`🌐 Initializing socket connection...`);
+        console.log(`📱 Device info: ${navigator.userAgent}`);
+        console.log(`🔗 Connecting to server...`);
+        
         socketRef.current = new SocketService();
         await socketRef.current.connect();
         
+        console.log(`✅ Socket connected successfully`);
+        
         // Register this number as available for calls
+        console.log(`📝 Registering user number: ${userNumber}`);
         socketRef.current.joinRoom(userNumber);
         setIsConnected(true);
+        
+        console.log(`✅ User ${userNumber} registered and ready for calls`);
         
         // Listen for incoming calls
         socketRef.current.on('user-calling', ({ callerCode, offer }: { callerCode: string; offer?: RTCSessionDescriptionInit }) => {
