@@ -698,16 +698,16 @@ const LandingPage: React.FC = () => {
     const digitsOnly = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
     const normalized = normalizePhoneNumber(phoneNumber.trim());
     
-    // Just check if we have a reasonable number of digits (7-10)
-    if (digitsOnly.length >= 7 && digitsOnly.length <= 10) {
+    // Just check if we have a reasonable number of digits (8-10)
+    if (digitsOnly.length >= 8 && digitsOnly.length <= 10) {
       return { 
         isValid: true, 
         message: `Will call: ${normalized}` 
       };
-    } else if (digitsOnly.length < 7) {
+    } else if (digitsOnly.length < 8) {
       return { 
         isValid: false, 
-        message: 'Too short - need at least 7 digits' 
+        message: 'Too short - need at least 8 digits' 
       };
     } else {
       return { 
