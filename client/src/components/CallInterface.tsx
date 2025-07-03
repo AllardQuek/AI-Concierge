@@ -16,6 +16,7 @@ const CallInterface: React.FC = () => {
   const [friendNumber, setFriendNumber] = useState('');
   const [isIncomingCall, setIsIncomingCall] = useState(false);
   const [incomingCallerNumber, setIncomingCallerNumber] = useState('');
+  const [isPlayingAnnouncement, setIsPlayingAnnouncement] = useState(false);
   
   const webrtcRef = useRef<WebRTCService | null>(null);
   const socketRef = useRef<SocketService | null>(null);
@@ -125,6 +126,9 @@ const CallInterface: React.FC = () => {
       // Initialize services
       webrtcRef.current = new WebRTCService();
       socketRef.current = new SocketService();
+      
+      // Reset recording announcement state for new call
+      webrtcRef.current.resetRecordingAnnouncementState();
       
       // Connect to signaling server
       await socketRef.current.connect();
@@ -363,6 +367,19 @@ const CallInterface: React.FC = () => {
       setCallState('connected');
       setFriendNumber(incomingCallerNumber);
       
+      // Play recording announcement to the recipient (B party)
+      if (webrtcRef.current && incomingCallerNumber) {
+        try {
+          console.log('🎙️ Playing recording announcement...');
+          setIsPlayingAnnouncement(true);
+          await webrtcRef.current.playRecordingAnnouncement(incomingCallerNumber);
+          setIsPlayingAnnouncement(false);
+        } catch (announcementError) {
+          console.warn('Recording announcement failed, but continuing with call:', announcementError);
+          setIsPlayingAnnouncement(false);
+        }
+      }
+      
       // Clean up the stored offer
       delete (window as any).incomingOffer;
       
@@ -518,6 +535,11 @@ const CallInterface: React.FC = () => {
               <div className="p-6 bg-green-50 rounded-lg border border-green-200">
                 <h3 className="text-xl font-semibold text-green-800 mb-2">🔊 Active Call</h3>
                 <p className="text-green-700">Connected to: <span className="font-mono font-bold">{friendNumber}</span></p>
+                {isPlayingAnnouncement && (
+                  <div className="mt-3 p-2 bg-yellow-100 border border-yellow-300 rounded text-yellow-800 text-sm">
+                    🎙️ Playing recording announcement...
+                  </div>
+                )}
               </div>
               <div className="flex gap-4">
                 <Button
@@ -526,6 +548,7 @@ const CallInterface: React.FC = () => {
                   size="large"
                   fullWidth
                   className="flex items-center justify-center gap-2"
+                  disabled={isPlayingAnnouncement}
                 >
                   {isMuted ? '🔇 Unmute' : '🔊 Mute'}
                 </Button>

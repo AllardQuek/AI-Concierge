@@ -1,13 +1,17 @@
 // WebRTC Service for handling peer-to-peer voice connections
+import { TextToSpeechService } from './textToSpeech';
+
 export class WebRTCService {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
   private remoteStream: MediaStream | null = null;
   private remoteAudioElement: HTMLAudioElement | null = null;
   private audioContext: AudioContext | null = null;
+  private ttsService: TextToSpeechService | null = null;
   private onRemoteStreamCallback?: (stream: MediaStream) => void;
   private onConnectionStateChangeCallback?: (state: string) => void;
   private userInteractionOccurred: boolean = false;
+  private recordingAnnouncementPlayed: boolean = false;
 
   // ICE servers configuration for NAT traversal
   private iceServers = [
@@ -18,6 +22,13 @@ export class WebRTCService {
   constructor() {
     this.initializePeerConnection();
     this.setupMobileAudioSupport();
+    
+    // Initialize text-to-speech service if supported
+    if (TextToSpeechService.isSupported()) {
+      this.ttsService = new TextToSpeechService();
+    } else {
+      console.warn('WebRTC: Text-to-speech not supported in this browser');
+    }
   }
 
   // Setup mobile audio support and user interaction handling
@@ -215,6 +226,30 @@ export class WebRTCService {
     return false;
   }
 
+  // Mute local audio
+  mute(): boolean {
+    if (this.localStream) {
+      const audioTrack = this.localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = false;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Unmute local audio
+  unmute(): boolean {
+    if (this.localStream) {
+      const audioTrack = this.localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        audioTrack.enabled = true;
+        return true;
+      }
+    }
+    return false;
+  }
+
   // Check if local audio is muted
   isMuted(): boolean {
     if (this.localStream) {
@@ -405,5 +440,46 @@ export class WebRTCService {
   // Check if user interaction has occurred (useful for UI feedback)
   hasUserInteracted(): boolean {
     return this.userInteractionOccurred;
+  }
+
+  // Play recording announcement for the call recipient
+  async playRecordingAnnouncement(callerNumber: string): Promise<void> {
+    if (!this.ttsService || this.recordingAnnouncementPlayed) {
+      return;
+    }
+
+    try {
+      console.log('🎙️ Playing recording announcement for incoming call');
+      this.recordingAnnouncementPlayed = true;
+      
+      // Temporarily mute the microphone during announcement
+      const originalMicMuted = this.isMuted();
+      if (!originalMicMuted) {
+        this.mute();
+      }
+
+      // Play the announcement
+      await this.ttsService.announceRecording(callerNumber);
+      
+      // Restore microphone state after announcement
+      if (!originalMicMuted) {
+        this.unmute();
+      }
+      
+      console.log('✅ Recording announcement completed');
+    } catch (error) {
+      console.error('❌ Failed to play recording announcement:', error);
+      // Don't throw error as this shouldn't break the call
+    }
+  }
+
+  // Check if recording announcement has been played
+  isRecordingAnnouncementPlayed(): boolean {
+    return this.recordingAnnouncementPlayed;
+  }
+
+  // Reset recording announcement state (for new calls)
+  resetRecordingAnnouncementState(): void {
+    this.recordingAnnouncementPlayed = false;
   }
 }
