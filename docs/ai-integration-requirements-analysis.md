@@ -327,50 +327,130 @@ class ServerAudioTap {
 
 Direct voice-to-LLM streaming is absolutely possible and represents the current frontier of AI voice technology. Several production-ready solutions are available in 2025.
 
-### **Available Voice-Native LLM Services**
+### **🔍 Critical Technical Challenge: Audio Flow Reality**
 
-#### **1. OpenAI Realtime API (GPT-4o Audio) - Most Mature**
+**The Core Question**: In WebRTC P2P calls, how does audio actually reach the voice LLM?
+
+#### **Current WebRTC Flow (Without Voice LLM)**
+```
+Microphone → MediaStream → WebRTC PeerConnection → Remote Browser
+```
+
+#### **Adding Voice LLM: The Integration Challenge**
+```
+Microphone → MediaStream → ??? → Voice LLM API → Audio Response → ???
+```
+
+The voice LLM needs to "intercept" or "tap into" the WebRTC audio stream. Here's how:
+
+### **🏗️ Audio Flow Implementation Options**
+
+#### **Option 1: Client-Side Audio Forking (Recommended)**
 ```typescript
-const realtimeSession = new RealtimeAPI({
-  model: 'gpt-4o-realtime-preview',
-  voice: 'nova'
-});
-
-// Stream raw audio directly
-realtimeSession.sendAudio(audioBuffer);
-
-// Receive audio responses directly
-realtimeSession.onAudioResponse((audioData) => {
-  playAudioResponse(audioData);
-});
+class WebRTCVoiceLLMIntegration {
+  private peerConnection: RTCPeerConnection;
+  private voiceLLMConnection: WebSocket;
+  
+  async setupCallWithVoiceLLM() {
+    // 1. NORMAL WebRTC setup (unchanged)
+    const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    this.peerConnection.addTrack(localStream.getAudioTracks()[0], localStream);
+    
+    // 2. SIMULTANEOUSLY tap audio for voice LLM
+    await this.forkAudioToVoiceLLM(localStream);
+  }
+  
+  private async forkAudioToVoiceLLM(audioStream: MediaStream) {
+    const audioContext = new AudioContext();
+    const source = audioContext.createMediaStreamSource(audioStream);
+    
+    // Process audio for LLM consumption
+    const processor = audioContext.createScriptProcessor(4096, 1, 1);
+    
+    processor.onaudioprocess = (event) => {
+      const audioData = event.inputBuffer.getChannelData(0);
+      
+      // Convert WebRTC Float32 to Voice LLM format (PCM16)
+      const pcm16Data = this.convertToPCM16(audioData);
+      
+      // Send to voice LLM via WebSocket
+      this.sendToVoiceLLM(pcm16Data);
+    };
+    
+    source.connect(processor);
+    processor.connect(audioContext.destination);
+  }
+  
+  private convertToPCM16(float32Audio: Float32Array): string {
+    // Convert Float32 (-1.0 to 1.0) to Int16 (-32768 to 32767)
+    const pcm16 = new Int16Array(float32Audio.length);
+    for (let i = 0; i < float32Audio.length; i++) {
+      const sample = Math.max(-1, Math.min(1, float32Audio[i]));
+      pcm16[i] = sample * 32767;
+    }
+    
+    // Convert to base64 for WebSocket transmission
+    const uint8Array = new Uint8Array(pcm16.buffer);
+    return btoa(String.fromCharCode(...uint8Array));
+  }
+  
+  private sendToVoiceLLM(audioData: string) {
+    this.voiceLLMConnection.send(JSON.stringify({
+      type: 'input_audio_buffer.append',
+      audio: audioData
+    }));
+  }
+}
 ```
 
-#### **2. Google Gemini Live**
+#### **Option 2: Server-Mediated Voice LLM**
 ```typescript
-const geminiLive = new GeminiLive({
-  model: 'gemini-2.0-flash-exp'
-});
+class ServerMediatedVoiceLLM {
+  async setupServerMediation() {
+    // Client sends audio to YOUR server, which forwards to voice LLM
+    const audioTap = new AudioTapService();
+    audioTap.streamToServer(audioStream, {
+      endpoint: 'wss://your-server.com/voice-llm-proxy',
+      conversationId: this.callId
+    });
+  }
+}
 
-await geminiLive.streamAudio(audioStream);
+// On your server
+class VoiceLLMProxy {
+  async handleClientAudio(audioChunk: ArrayBuffer, conversationId: string) {
+    // Forward to OpenAI Realtime API
+    const voiceLLMResponse = await this.openAIRealtime.processAudio(audioChunk);
+    
+    // Send AI response back to client
+    this.sendToClient(conversationId, voiceLLMResponse);
+  }
+}
 ```
 
-#### **3. ElevenLabs Conversational AI**
-```typescript
-const conversation = new ElevenLabsConversation({
-  agentId: 'your-agent-id'
-});
-
-conversation.startVoiceSession(audioStream);
+### **🎯 The Dual-Stream Architecture**
+```
+┌─────────────────┐    WebRTC P2P    ┌─────────────────┐
+│   Browser A     │ ←─────────────→ │   Browser B     │
+│                 │                  │                 │
+│ ┌─────────────┐ │                  │ ┌─────────────┐ │
+│ │ Microphone  │ │                  │ │ Speaker     │ │
+│ └─────────────┘ │                  │ └─────────────┘ │
+│        │        │                  │                 │
+│        ▼        │                  │                 │
+│ ┌─────────────┐ │                  │                 │
+│ │ Audio Fork  │ │                  │                 │
+│ └─────────────┘ │                  │                 │
+│        │        │                  │                 │
+│        ▼        │                  │                 │
+│ ┌─────────────┐ │  WebSocket       │                 │
+│ │ Voice LLM   │─┼──────────────────┼─► AI Processing │
+│ │ Connection  │ │                  │                 │
+│ └─────────────┘ │                  │                 │
+└─────────────────┘                  └─────────────────┘
 ```
 
-### **Voice-Native Architecture**
-```
-Browser Audio → Audio Buffer → Voice LLM → Audio Response
-     ↓              ↓            ↓           ↓
-  MediaRecorder → WebSocket → GPT-4o → Audio Playback
-```
-
-**Key Advantage**: No transcription step needed! The model processes audio directly and responds with audio.
+**Key Insight**: You run **two parallel audio streams** - WebRTC call continues normally while a copy processes through voice LLM.
 
 ### **Implementation Example**
 ```typescript
@@ -811,4 +891,4 @@ The technology stack is mature, the costs are reasonable, and the implementation
 ---
 
 *Document last updated: July 3, 2025*
-*Analysis covers production-ready technologies available as of 2025*
+*Analysis covers production-ready technologies available as of 2025**

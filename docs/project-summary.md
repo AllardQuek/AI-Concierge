@@ -12,6 +12,7 @@
 - **WebRTC P2P Voice Communication** - Direct peer-to-peer audio with ultra-low latency
 - **Socket.IO Signaling Server** - Real-time WebRTC negotiation and session management
 - **Phone Number Based Calling** - Users call each other using Singapore (+65) phone number codes
+- **Recording Announcement** - Automated text-to-speech notification that calls will be recorded
 - **Modern React Frontend** - Single-page TypeScript app with Tailwind CSS styling
 - **Clean Call Interface** - Streamlined calling experience with mute/unmute controls
 - **Call Duration Timer** - Real-time call duration display during active calls
@@ -82,6 +83,30 @@ User A Device  ◄═══ WebRTC P2P Audio ═══► User B Device
 - **Privacy**: Audio never touches the server
 - **Bandwidth Efficiency**: Server doesn't handle audio data
 
+## 🎙️ Recording Announcement Feature
+
+### How It Works
+
+When someone answers an incoming call, the system automatically:
+
+1. **Plays TTS Announcement** - Uses browser's Speech Synthesis API
+2. **Mutes Caller's Microphone** - Prevents echo during announcement
+3. **Professional Message** - "This call will be recorded for quality and training purposes"
+4. **Restores Microphone** - Normal conversation can begin after announcement
+5. **Visual Indicator** - UI shows when announcement is playing
+
+### Technical Implementation
+
+- **TextToSpeechService** - Dedicated service for voice announcements
+- **Browser Compatibility** - Works with all modern browsers supporting Web Speech API
+- **Mobile Support** - Compatible with iOS and Android browsers
+- **Non-blocking** - Call continues even if TTS fails
+- **One-time per call** - Announcement only plays once per call session
+
+### Message Format
+
+For Singapore numbers: *"Hello, this is an automated announcement. You are receiving a call from +65, 9-1-2-3-4-5-6-7. Please be aware that this call will be recorded for quality and training purposes. The call will begin in a moment."*
+
 ## 📁 File Structure Summary
 
 ```
@@ -92,7 +117,8 @@ User A Device  ◄═══ WebRTC P2P Audio ═══► User B Device
 │   │   └── shared/                  ✅ Reusable UI components
 │   ├── src/services/
 │   │   ├── socket.ts                ✅ WebRTC signaling
-│   │   └── webrtc.ts                ✅ P2P voice communication
+│   │   ├── webrtc.ts                ✅ P2P voice communication
+│   │   └── textToSpeech.ts          ✅ Recording announcements
 │   └── public/
 │       └── audio-processor.js       📋 AudioWorklet (unused currently)
 ├── server/                          # Backend Services
