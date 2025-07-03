@@ -500,9 +500,20 @@ const LandingPage: React.FC = () => {
       
       // Set a timeout for the call connection
       callTimeoutRef.current = window.setTimeout(() => {
-        console.log('⏰ Call connection timeout');
-        setError('Connection timeout - please try again');
-        setCallState('idle');
+        console.log('⏰ Call connection timeout after 30 seconds');
+        console.log('🔍 Attempting connection recovery...');
+        
+        // Try ICE restart first
+        if (webrtcRef.current) {
+          webrtcRef.current.restartIce().catch(() => {
+            console.log('❌ ICE restart failed, ending call');
+            setError('Connection timeout - network issues detected');
+            setCallState('idle');
+          });
+        } else {
+          setError('Connection timeout - please try again');
+          setCallState('idle');
+        }
       }, 30000); // 30 second timeout
       
       // Get user media and create offer

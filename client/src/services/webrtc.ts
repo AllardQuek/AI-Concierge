@@ -11,16 +11,32 @@ export class WebRTCService {
 
   // ICE servers configuration for NAT traversal (enhanced for mobile)
   private iceServers = [
+    // Primary Google STUN servers (most reliable)
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    // { urls: 'stun:stun2.l.google.com:19302' },
-    // { urls: 'stun:stun3.l.google.com:19302' },
-    // { urls: 'stun:stun4.l.google.com:19302' },
-    // Additional STUN servers for better mobile connectivity
-    // { urls: 'stun:stun.stunprotocol.org:3478' },
-    // { urls: 'stun:stun.ekiga.net' },
-    // TURN servers can be added here for users behind restrictive NATs
-    // Most mobile-to-mobile calls work with STUN, but TURN helps with corporate networks
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    
+    // Additional STUN servers for redundancy
+    { urls: 'stun:stun.stunprotocol.org:3478' },
+    { urls: 'stun:stun.ekiga.net' },
+    
+    // Free public TURN servers for mobile NAT traversal
+    {
+      urls: 'turn:openrelay.metered.ca:80',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443',
+      username: 'openrelayproject', 
+      credential: 'openrelayproject'
+    },
+    {
+      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
   ];
 
   constructor() {
@@ -53,6 +69,11 @@ export class WebRTCService {
   private initializePeerConnection() {
     this.peerConnection = new RTCPeerConnection({
       iceServers: this.iceServers,
+      // Enhanced configuration for mobile networks
+      iceCandidatePoolSize: 10, // Generate more ICE candidates
+      iceTransportPolicy: 'all', // Use both STUN and TURN
+      bundlePolicy: 'max-bundle', // Better for mobile networks
+      rtcpMuxPolicy: 'require' // Reduce port usage
     });
 
     // Handle remote stream
@@ -107,27 +128,44 @@ export class WebRTCService {
 
     // Handle ICE gathering state
     this.peerConnection.onicegatheringstatechange = () => {
-      console.log('ICE gathering state:', this.peerConnection?.iceGatheringState);
+      const gatheringState = this.peerConnection?.iceGatheringState;
+      console.log('🧊 ICE gathering state:', gatheringState);
+      
+      if (gatheringState === 'complete') {
+        console.log('✅ ICE gathering completed - all candidates found');
+      } else if (gatheringState === 'gathering') {
+        console.log('🔄 ICE gathering in progress - finding network paths...');
+      }
     };
 
     // Handle ICE connection state changes - crucial for diagnosing connection failures
     this.peerConnection.oniceconnectionstatechange = () => {
       const iceState = this.peerConnection?.iceConnectionState || 'new';
-      console.log('ICE connection state:', iceState);
+      console.log(`🧊 ICE connection state: ${iceState}`);
       
-      // This is the key diagnostic information for your connection issues
-      if (iceState === 'failed') {
-        console.log('🔴 ICE connection failed - usually indicates NAT/firewall issues');
-        console.log('💡 Consider adding TURN servers for better connectivity');
+      if (iceState === 'checking') {
+        console.log('🔄 ICE checking - testing network connectivity paths...');
+      } else if (iceState === 'connected') {
+        console.log('🟢 ICE connected - direct connection established!');
+      } else if (iceState === 'completed') {
+        console.log('✅ ICE completed - optimal connection path found');
+      } else if (iceState === 'failed') {
+        console.log('🔴 ICE connection failed - network issues detected');
+        console.log('💡 Possible causes:');
+        console.log('   - Strict firewall/NAT blocking connection');
+        console.log('   - STUN servers unreachable');
+        console.log('   - Need TURN server for this network');
+        console.log('   - Different network types (cellular vs WiFi)');
+        
         // Attempt ICE restart if available
         if (this.peerConnection && this.peerConnection.restartIce) {
-          console.log('🔄 Attempting ICE restart...');
+          console.log('🔄 Attempting automatic ICE restart...');
           this.peerConnection.restartIce();
         }
       } else if (iceState === 'disconnected') {
-        console.log('🟡 ICE connection disconnected - connection may recover or fail');
-      } else if (iceState === 'connected' || iceState === 'completed') {
-        console.log('🟢 ICE connection established successfully');
+        console.log('🟡 ICE disconnected - connection lost, may recover...');
+      } else if (iceState === 'closed') {
+        console.log('⚫ ICE connection closed');
       }
     };
   }
@@ -223,10 +261,28 @@ export class WebRTCService {
     }
 
     try {
-      const offer = await this.peerConnection.createOffer();
+      console.log('🔄 Creating WebRTC offer with enhanced mobile support...');
+      const offer = await this.peerConnection.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false,
+        iceRestart: false
+      });
+      
       await this.peerConnection.setLocalDescription(offer);
       console.log('WebRTC: Created offer, signaling state:', this.peerConnection.signalingState);
-      return offer;
+      
+      // Wait for ICE gathering to complete or timeout (crucial for mobile)
+      console.log('🧊 Waiting for ICE candidates to be gathered...');
+      await this.waitForIceGathering(15000); // 15 second timeout for mobile networks
+      
+      // Return the complete offer with all ICE candidates
+      const completeOffer = this.peerConnection.localDescription;
+      if (!completeOffer) {
+        throw new Error('Failed to get complete offer after ICE gathering');
+      }
+      
+      console.log('✅ Offer created with ICE candidates, SDP length:', completeOffer.sdp?.length || 0);
+      return completeOffer;
     } catch (error) {
       console.error('WebRTC: Error creating offer:', error);
       throw error;
@@ -261,14 +317,28 @@ export class WebRTCService {
       await this.peerConnection.setRemoteDescription(offer);
       
       // Create and set local answer
-      console.log('WebRTC: Creating answer...');
-      const answer = await this.peerConnection.createAnswer();
+      console.log('🔄 Creating WebRTC answer with enhanced mobile support...');
+      const answer = await this.peerConnection.createAnswer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: false
+      });
       await this.peerConnection.setLocalDescription(answer);
       
       console.log('WebRTC: Created answer with local tracks:', this.localStream?.getTracks().length || 0);
-      console.log('WebRTC: Final signaling state:', this.peerConnection.signalingState);
+      console.log('WebRTC: Signaling state after createAnswer:', this.peerConnection.signalingState);
       
-      return answer;
+      // Wait for ICE gathering to complete (crucial for mobile)
+      console.log('🧊 Waiting for ICE candidates to be gathered for answer...');
+      await this.waitForIceGathering(15000); // 15 second timeout for mobile networks
+      
+      // Return the complete answer with all ICE candidates
+      const completeAnswer = this.peerConnection.localDescription;
+      if (!completeAnswer) {
+        throw new Error('Failed to get complete answer after ICE gathering');
+      }
+      
+      console.log('✅ Answer created with ICE candidates, SDP length:', completeAnswer.sdp?.length || 0);
+      return completeAnswer;
     } catch (error) {
       console.error('WebRTC: Error in createAnswer:', error);
       // If we get an SDP error, try resetting and retrying once
@@ -727,5 +797,95 @@ export class WebRTCService {
     }
     
     this.cleanup();
+  }
+
+  // Wait for ICE gathering to complete (crucial for mobile networks)
+  private async waitForIceGathering(timeoutMs: number = 10000): Promise<void> {
+    if (!this.peerConnection) {
+      throw new Error('Peer connection not initialized');
+    }
+
+    return new Promise((resolve) => {
+      let stunCandidatesFound = 0;
+      let hostCandidatesFound = 0;
+      let turnCandidatesFound = 0;
+      
+      const timeout = setTimeout(() => {
+        console.log(`⏰ ICE gathering timeout (${timeoutMs}ms) reached`);
+        console.log(`📊 Candidates found: HOST=${hostCandidatesFound}, STUN=${stunCandidatesFound}, TURN=${turnCandidatesFound}`);
+        
+        if (stunCandidatesFound === 0 && turnCandidatesFound === 0) {
+          console.log('⚠️  No STUN/TURN candidates found - connection may fail on different networks');
+          console.log('💡 Consider checking STUN server connectivity or network restrictions');
+        }
+        
+        resolve(); // Don't reject, just proceed with available candidates
+      }, timeoutMs);
+
+      // Track ICE candidates as they're generated
+      const originalOnIceCandidate = this.peerConnection?.onicecandidate || null;
+      
+      const candidateTracker = (event: RTCPeerConnectionIceEvent) => {
+        if (event.candidate && event.candidate.candidate) {
+          const candidate = event.candidate.candidate;
+          
+          if (candidate.includes('typ host')) {
+            hostCandidatesFound++;
+            console.log(`🏠 HOST candidate found (#${hostCandidatesFound})`);
+          } else if (candidate.includes('typ srflx')) {
+            stunCandidatesFound++;
+            console.log(`🌐 STUN candidate found (#${stunCandidatesFound}) - good for NAT traversal!`);
+          } else if (candidate.includes('typ relay')) {
+            turnCandidatesFound++;
+            console.log(`🔄 TURN candidate found (#${turnCandidatesFound}) - excellent for restrictive networks!`);
+          }
+        }
+        
+        // Call original handler if it exists
+        if (originalOnIceCandidate && this.peerConnection) {
+          originalOnIceCandidate.call(this.peerConnection, event);
+        }
+      };
+
+      // Set our tracking handler
+      if (this.peerConnection) {
+        this.peerConnection.onicecandidate = candidateTracker;
+      }
+
+      const checkGatheringState = () => {
+        const state = this.peerConnection?.iceGatheringState;
+        console.log('🧊 ICE gathering state check:', state);
+        
+        if (state === 'complete') {
+          clearTimeout(timeout);
+          console.log('✅ ICE gathering completed successfully');
+          console.log(`📊 Final candidates: HOST=${hostCandidatesFound}, STUN=${stunCandidatesFound}, TURN=${turnCandidatesFound}`);
+          
+          // Restore original handler
+          if (this.peerConnection) {
+            this.peerConnection.onicecandidate = originalOnIceCandidate;
+          }
+          
+          resolve();
+        }
+      };
+
+      // Check current state
+      checkGatheringState();
+
+      // Listen for state changes
+      if (this.peerConnection) {
+        this.peerConnection.addEventListener('icegatheringstatechange', checkGatheringState);
+        
+        // Cleanup listener when done
+        timeout && setTimeout(() => {
+          this.peerConnection?.removeEventListener('icegatheringstatechange', checkGatheringState);
+          // Restore original handler
+          if (this.peerConnection) {
+            this.peerConnection.onicecandidate = originalOnIceCandidate;
+          }
+        }, timeoutMs + 1000);
+      }
+    });
   }
 }
