@@ -78,34 +78,16 @@ export class WebRTCService {
 
     // Handle remote stream
     this.peerConnection.ontrack = (event) => {
-      console.log('WebRTC: Received remote track', event.track.kind, event.track.id);
+      console.log('WebRTC: Received remote track', event.track.kind);
       const [remoteStream] = event.streams;
       this.remoteStream = remoteStream;
-      console.log('WebRTC: Remote stream tracks:', remoteStream.getTracks().length);
       
       // Enhanced iOS Safari audio track handling
       if (event.track.kind === 'audio') {
-        console.log('WebRTC: Audio track received - readyState:', event.track.readyState, 'enabled:', event.track.enabled);
-        
         // iOS Safari specific audio track setup
         if (this.isIOSSafari()) {
-          console.log('WebRTC: Applying iOS Safari remote audio track fixes');
-          
-          // Ensure the track is enabled
+          console.log('WebRTC: Applying iOS Safari audio track fixes');
           event.track.enabled = true;
-          
-          // Add iOS-specific event listeners for debugging
-          event.track.addEventListener('ended', () => {
-            console.log('WebRTC: Remote audio track ended on iOS Safari');
-          });
-          
-          event.track.addEventListener('mute', () => {
-            console.log('WebRTC: Remote audio track muted on iOS Safari');
-          });
-          
-          event.track.addEventListener('unmute', () => {
-            console.log('WebRTC: Remote audio track unmuted on iOS Safari');
-          });
         }
       }
       
@@ -130,12 +112,6 @@ export class WebRTCService {
     this.peerConnection.onicegatheringstatechange = () => {
       const gatheringState = this.peerConnection?.iceGatheringState;
       console.log('🧊 ICE gathering state:', gatheringState);
-      
-      if (gatheringState === 'complete') {
-        console.log('✅ ICE gathering completed - all candidates found');
-      } else if (gatheringState === 'gathering') {
-        console.log('🔄 ICE gathering in progress - finding network paths...');
-      }
     };
 
     // Handle ICE connection state changes - crucial for diagnosing connection failures
@@ -182,11 +158,10 @@ export class WebRTCService {
       });
       
       this.localStream = stream;
-      console.log('WebRTC: Got local stream with tracks:', stream.getTracks().length);
+      console.log('WebRTC: Got local stream with', stream.getTracks().length, 'tracks');
       
       // Force-enable audio tracks for iOS Safari (critical fix)
       stream.getAudioTracks().forEach(track => {
-        console.log('WebRTC: Audio track state before enabling:', track.readyState, track.enabled);
         track.enabled = true;
         
         // iOS Safari-specific audio track handling
@@ -200,28 +175,13 @@ export class WebRTCService {
             autoGainControl: true,
             sampleRate: 48000
           }).catch(err => console.warn('WebRTC: iOS constraint application failed:', err));
-          
-          // Add iOS-specific event listeners
-          track.addEventListener('ended', () => {
-            console.log('WebRTC: iOS audio track ended unexpectedly');
-          });
-          
-          track.addEventListener('mute', () => {
-            console.log('WebRTC: iOS audio track muted');
-          });
-          
-          track.addEventListener('unmute', () => {
-            console.log('WebRTC: iOS audio track unmuted');
-          });
         }
-        
-        console.log('WebRTC: Audio track state after enabling:', track.readyState, track.enabled);
       });
       
       // Add tracks to peer connection
       if (this.peerConnection) {
         stream.getTracks().forEach(track => {
-          console.log('WebRTC: Adding local track to peer connection:', track.kind, track.id);
+          console.log('WebRTC: Adding local track to peer connection:', track.kind);
           this.peerConnection!.addTrack(track, stream);
         });
       }
@@ -261,7 +221,7 @@ export class WebRTCService {
     }
 
     try {
-      console.log('🔄 Creating WebRTC offer with enhanced mobile support...');
+      console.log('🔄 Creating WebRTC offer...');
       const offer = await this.peerConnection.createOffer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: false,
@@ -272,7 +232,7 @@ export class WebRTCService {
       console.log('WebRTC: Created offer, signaling state:', this.peerConnection.signalingState);
       
       // Wait for ICE gathering to complete or timeout (crucial for mobile)
-      console.log('🧊 Waiting for ICE candidates to be gathered...');
+      console.log('🧊 Waiting for ICE candidates...');
       await this.waitForIceGathering(15000); // 15 second timeout for mobile networks
       
       // Return the complete offer with all ICE candidates
@@ -281,7 +241,7 @@ export class WebRTCService {
         throw new Error('Failed to get complete offer after ICE gathering');
       }
       
-      console.log('✅ Offer created with ICE candidates, SDP length:', completeOffer.sdp?.length || 0);
+      console.log('✅ Offer created with ICE candidates');
       return completeOffer;
     } catch (error) {
       console.error('WebRTC: Error creating offer:', error);
@@ -317,18 +277,18 @@ export class WebRTCService {
       await this.peerConnection.setRemoteDescription(offer);
       
       // Create and set local answer
-      console.log('🔄 Creating WebRTC answer with enhanced mobile support...');
+      console.log('🔄 Creating WebRTC answer...');
       const answer = await this.peerConnection.createAnswer({
         offerToReceiveAudio: true,
         offerToReceiveVideo: false
       });
       await this.peerConnection.setLocalDescription(answer);
       
-      console.log('WebRTC: Created answer with local tracks:', this.localStream?.getTracks().length || 0);
+      console.log('WebRTC: Created answer with', this.localStream?.getTracks().length || 0, 'local tracks');
       console.log('WebRTC: Signaling state after createAnswer:', this.peerConnection.signalingState);
       
       // Wait for ICE gathering to complete (crucial for mobile)
-      console.log('🧊 Waiting for ICE candidates to be gathered for answer...');
+      console.log('🧊 Waiting for ICE candidates for answer...');
       await this.waitForIceGathering(15000); // 15 second timeout for mobile networks
       
       // Return the complete answer with all ICE candidates
@@ -337,7 +297,7 @@ export class WebRTCService {
         throw new Error('Failed to get complete answer after ICE gathering');
       }
       
-      console.log('✅ Answer created with ICE candidates, SDP length:', completeAnswer.sdp?.length || 0);
+      console.log('✅ Answer created with ICE candidates');
       return completeAnswer;
     } catch (error) {
       console.error('WebRTC: Error in createAnswer:', error);
@@ -398,7 +358,7 @@ export class WebRTCService {
     // Re-add tracks if we had a stream
     if (currentStream && this.peerConnection) {
       currentStream.getTracks().forEach(track => {
-        console.log('WebRTC: Re-adding track to fresh peer connection:', track.kind, track.id);
+        console.log('WebRTC: Re-adding track to fresh peer connection:', track.kind);
         this.peerConnection!.addTrack(track, currentStream);
       });
     }
@@ -420,7 +380,7 @@ export class WebRTCService {
     if (this.peerConnection) {
       this.peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
-          console.log('🧊 ICE candidate generated:', event.candidate.type, event.candidate.candidate);
+          console.log('🧊 ICE candidate generated:', event.candidate.type);
           callback(event.candidate);
         } else {
           console.log('🧊 ICE candidate gathering complete');
@@ -479,7 +439,7 @@ export class WebRTCService {
     
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => {
-        console.log('WebRTC: Stopping local track:', track.kind, track.id);
+        console.log('WebRTC: Stopping local track:', track.kind);
         track.stop();
       });
       this.localStream = null;
@@ -578,48 +538,6 @@ export class WebRTCService {
     // Add to DOM for mobile compatibility
     document.body.appendChild(this.remoteAudioElement);
 
-    // Enhanced event listeners for debugging audio issues
-    // this.remoteAudioElement.addEventListener('loadstart', () => {
-    //   console.log('🔊 Remote audio: loadstart');
-    // });
-    
-    // this.remoteAudioElement.addEventListener('loadeddata', () => {
-    //   console.log('🔊 Remote audio: loadeddata');
-    // });
-    
-    // this.remoteAudioElement.addEventListener('canplay', () => {
-    //   console.log('🔊 Remote audio: canplay - attempting autoplay...');
-    //   this.playRemoteAudio();
-    // });
-    
-    // this.remoteAudioElement.addEventListener('play', () => {
-    //   console.log('✅ Remote audio: playing successfully');
-    // });
-    
-    // this.remoteAudioElement.addEventListener('playing', () => {
-    //   console.log('✅ Remote audio: playing event fired');
-    // });
-    
-    // this.remoteAudioElement.addEventListener('pause', () => {
-    //   console.log('⏸️ Remote audio: paused');
-    // });
-    
-    // this.remoteAudioElement.addEventListener('error', (e) => {
-    //   console.error('❌ Remote audio error:', e);
-    // });
-    
-    // this.remoteAudioElement.addEventListener('stalled', () => {
-    //   console.warn('⚠️ Remote audio: stalled');
-    // });
-    
-    // Android Chrome specific: Force play after small delay
-    // if (this.isAndroidChrome()) {
-    //   console.log('📱 Android Chrome detected - applying audio fixes...');
-    //   setTimeout(() => {
-    //     this.playRemoteAudio();
-    //   }, 500);
-    // }
-
     // Handle audio play promise for mobile
     this.playRemoteAudio();
   }
@@ -628,33 +546,12 @@ export class WebRTCService {
   private async playRemoteAudio() {
     if (!this.remoteAudioElement) return;
 
-    // const deviceType = this.getDeviceType();
-    // console.log(`🔊 Attempting to play remote audio on ${deviceType}...`);
-    // console.log('🔊 User interaction occurred:', this.userInteractionOccurred);
-    // console.log('🔊 Audio context state:', this.audioContext?.state || 'None');
-    // console.log('🔊 Audio element ready state:', this.remoteAudioElement.readyState);
-    // console.log('🔊 Audio element volume:', this.remoteAudioElement.volume);
-    // console.log('🔊 Audio element muted:', this.remoteAudioElement.muted);
-
     try {
       // Always try to resume audio context first (crucial for iOS)
       if (this.audioContext && this.audioContext.state === 'suspended') {
         console.log('🔊 Resuming suspended audio context...');
         await this.audioContext.resume();
       }
-
-      // Android Chrome specific fixes
-      // if (this.isAndroidChrome()) {
-      //   console.log('📱 Applying Android Chrome audio fixes...');
-      //   // Force volume and unmute
-      //   this.remoteAudioElement.volume = 1.0;
-      //   this.remoteAudioElement.muted = false;
-        
-      //   // Try to trigger user interaction if needed
-      //   if (!this.userInteractionOccurred) {
-      //     console.log('⚠️ No user interaction yet on Android - may need manual trigger');
-      //   }
-      // }
 
       // Force play the audio element
       console.log('🔊 Attempting to play audio element...');
@@ -758,22 +655,6 @@ export class WebRTCService {
         console.log('WebRTC: iOS audio context pre-resumed');
       }
       
-      // Pre-create a silent audio element to "unlock" audio on iOS
-      // const silentAudio = document.createElement('audio');
-      // silentAudio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjMyLjEwNAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4OD//////////////////8AAAAATGF2YzU4LjU1AAAAAAAAAAAAAAAAJAAAAAAAAAAAASDb3AgAAAAAAPf/w4QAAAAAAAAAAAAAAAAAAAAAAAAASVREAAAAAAAfxJeaAAABkklEQVR4nGNgGAWjYBSMglEwCkbBKBgFo2AUjIJRMApGwSgYBaNgFIyC/w0AcJhjAAAQAAAAA//8Q==';
-      // silentAudio.volume = 0.01;
-      // silentAudio.muted = true;
-      
-      // try {
-      //   await silentAudio.play();
-      //   console.log('WebRTC: iOS silent audio played successfully');
-      // } catch (error) {
-      //   console.warn('WebRTC: iOS silent audio play failed:', error);
-      // }
-      
-      // // Clean up silent audio
-      // silentAudio.remove();
-      
     } catch (error) {
       console.warn('WebRTC: iOS call preparation failed:', error);
     }
@@ -786,28 +667,6 @@ export class WebRTCService {
     const isSafari = /Safari/.test(userAgent) && !/Chrome/.test(userAgent);
     return isIOS && isSafari;
   }
-
-  // // Check if running on Android Chrome
-  // private isAndroidChrome(): boolean {
-  //   const userAgent = navigator.userAgent;
-  //   const isAndroid = /Android/.test(userAgent);
-  //   const isChrome = /Chrome/.test(userAgent) && !/Edge/.test(userAgent);
-  //   return isAndroid && isChrome;
-  // }
-
-  // // Check if running on mobile device
-  // private isMobile(): boolean {
-  //   const userAgent = navigator.userAgent;
-  //   return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
-  // }
-
-  // // Get device type for logging
-  // private getDeviceType(): string {
-  //   if (this.isIOSSafari()) return 'iOS Safari';
-  //   if (this.isAndroidChrome()) return 'Android Chrome';
-  //   if (this.isMobile()) return 'Mobile (Other)';
-  //   return 'Desktop';
-  // }
 
   // Get mobile-optimized audio constraints
   private getMobileAudioConstraints(): MediaTrackConstraints {
@@ -888,7 +747,6 @@ export class WebRTCService {
         
         if (stunCandidatesFound === 0 && turnCandidatesFound === 0) {
           console.log('⚠️  No STUN/TURN candidates found - connection may fail on different networks');
-          console.log('💡 Consider checking STUN server connectivity or network restrictions');
         }
         
         resolve(); // Don't reject, just proceed with available candidates
@@ -906,10 +764,10 @@ export class WebRTCService {
             console.log(`🏠 HOST candidate found (#${hostCandidatesFound})`);
           } else if (candidate.includes('typ srflx')) {
             stunCandidatesFound++;
-            console.log(`🌐 STUN candidate found (#${stunCandidatesFound}) - good for NAT traversal!`);
+            console.log(`🌐 STUN candidate found (#${stunCandidatesFound})`);
           } else if (candidate.includes('typ relay')) {
             turnCandidatesFound++;
-            console.log(`🔄 TURN candidate found (#${turnCandidatesFound}) - excellent for restrictive networks!`);
+            console.log(`🔄 TURN candidate found (#${turnCandidatesFound})`);
           }
         }
         
