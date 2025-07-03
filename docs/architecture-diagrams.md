@@ -1,153 +1,205 @@
-# Sybil Architecture Diagrams - Multiple Formats
+# Sybil Architecture Diagrams - WebRTC Voice Calling App
 
 ## 🖼️ Mermaid Diagrams (GitHub/VS Code Compatible)
 
-### System Architecture Flow
+### Current System Architecture
 ```mermaid
 graph TD
-    C[Customer Interface] -.->|WebRTC P2P| A[Agent Interface]
-    C -->|Audio Tap| AW1[AudioWorklet]
-    A -->|Audio Tap| AW2[AudioWorklet]
+    U1[User 1<br/>Phone: +65 1234 5678] -->|WebRTC Audio| U2[User 2<br/>Phone: +65 8765 4321]
+    U2 -->|WebRTC Audio| U1
     
-    AW1 --> AI[AI Processing Hub<br/>Port 5001]
-    AW2 --> AI
+    U1 -->|Socket.IO Signaling| S[Signaling Server<br/>Port 5000]
+    U2 -->|Socket.IO Signaling| S
     
-    AI --> STT[Speech-to-Text<br/>Azure/Whisper]
-    STT --> LLM[LLM Analysis<br/>GPT-4o]
-    LLM --> ACT[Action Engine]
+    subgraph "WebRTC P2P"
+        direction TB
+        ICE[ICE Negotiation]
+        SDP[SDP Exchange]
+        AUDIO[Direct Audio Stream]
+    end
     
-    ACT --> DASH[AI Dashboard]
-    DASH --> A
+    S -->|Facilitates| ICE
+    ICE --> SDP
+    SDP --> AUDIO
     
-    style C fill:#e1f5fe
-    style A fill:#f3e5f5
-    style AI fill:#fff3e0
-    style DASH fill:#e8f5e8
+    style U1 fill:#e1f5fe
+    style U2 fill:#e1f5fe
+    style S fill:#fff3e0
+    style AUDIO fill:#e8f5e8
 ```
 
-### Component Integration Map
+### Component Architecture
 ```mermaid
-graph LR
+graph TB
     subgraph "Frontend (React + TypeScript)"
-        LP[LandingPage.tsx]
-        CI[CustomerInterface.tsx]
-        AGI[AgentInterface.tsx]
-        AID[AIDashboard.tsx]
+        LP[LandingPage.tsx<br/>• Phone number input<br/>• Call state management<br/>• Audio controls]
         
         subgraph "Services"
-            SOC[socket.ts]
-            WEB[webrtc.ts]
-            AIS[ai.ts]
+            SOC[socket.ts<br/>Socket.IO client]
+            WEB[webrtc.ts<br/>WebRTC peer connection]
         end
         
-        subgraph "Audio Processing"
-            AWP[audio-processor.js]
+        subgraph "UI Components"
+            BTN[Button.tsx]
+            TXT[TextInput.tsx]
+            STAT[ConnectionStatus.tsx]
+            ICO[Icons.tsx]
         end
     end
     
     subgraph "Backend (Node.js)"
-        SIG[Signaling Server<br/>Port 5000]
-        AI[AI Service<br/>Port 5001]
+        SIG[Express + Socket.IO Server<br/>Port 5000<br/>• WebRTC signaling only<br/>• No audio processing]
     end
     
-    subgraph "External APIs"
-        OAI[OpenAI GPT-4o]
-        AZS[Azure Speech]
-    end
-    
-    CI --> SOC
-    AGI --> SOC
-    AGI --> AID
+    LP --> SOC
+    LP --> WEB
     SOC --> SIG
-    AIS --> AI
-    AWP --> AI
-    AI --> OAI
-    AI --> AZS
+    WEB -.->|P2P Audio| WEB
     
-    style CI fill:#e3f2fd
-    style AGI fill:#f1f8e9
-    style AID fill:#fff8e1
-    style AI fill:#fce4ec
+    style LP fill:#e3f2fd
+    style SIG fill:#fff8e1
+    style WEB fill:#e8f5e8
 ```
 
-### Data Flow Sequence
+### Call Flow Sequence
 ```mermaid
 sequenceDiagram
-    participant C as Customer
-    participant A as Agent
-    participant AI as AI Service
-    participant LLM as OpenAI GPT-4o
-    participant DASH as AI Dashboard
+    participant U1 as User 1 (Caller)
+    participant S as Signaling Server
+    participant U2 as User 2 (Callee)
     
-    C->>+A: WebRTC Voice Connection (30-50ms)
-    Note over C,A: Ultra-low latency voice maintained
+    U1->>S: Enter phone number & initiate call
+    S->>U2: Incoming call notification
+    Note over U2: Phone rings, user can accept/decline
     
-    par Voice Communication
-        C->>A: Continuous audio stream
-        A->>C: Response audio stream
-    and AI Analysis Pipeline
-        C->>AI: Audio chunks (250ms)
-        A->>AI: Audio chunks (250ms)
-        AI->>+LLM: Transcription + Context
-        LLM->>-AI: Sentiment + Insights + Actions
-        AI->>DASH: Real-time updates
-        DASH->>A: Live recommendations
+    alt User accepts call
+        U2->>S: Accept call
+        S->>U1: Call accepted
+        
+        Note over U1,U2: WebRTC ICE/SDP Exchange via Server
+        U1->>S: ICE candidates & SDP offer
+        S->>U2: Forward ICE/SDP
+        U2->>S: ICE candidates & SDP answer
+        S->>U1: Forward ICE/SDP
+        
+        Note over U1,U2: Direct P2P Audio Connection Established
+        U1<-->U2: WebRTC Audio Stream (bypasses server)
+        
+        Note over U1,U2: Call duration tracking, mute/unmute controls
+        
+        alt Either user ends call
+            U1->>S: End call
+            S->>U2: Call ended
+        end
+        
+    else User declines call
+        U2->>S: Decline call
+        S->>U1: Call declined
     end
-    
-    Note over AI,DASH: Total AI latency: ~800ms
-    Note over C,A: Voice latency unchanged: <50ms
 ```
 
-## 🎯 Draw.io/Diagrams.net XML Export
 
-### System Architecture (Importable to Draw.io)
-```xml
-<mxfile host="app.diagrams.net">
-  <diagram name="Sybil Architecture">
-    <mxGraphModel dx="1422" dy="794" grid="1" gridSize="10" guides="1">
-      <root>
-        <mxCell id="0"/>
-        <mxCell id="1" parent="0"/>
-        
-        <!-- Customer Interface -->
-        <mxCell id="customer" value="Customer Interface&#xa;• Call Request&#xa;• Audio Controls&#xa;• Status View" 
-                 style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1f5fe;strokeColor=#01579b;" 
-                 vertex="1" parent="1">
-          <mxGeometry x="50" y="150" width="150" height="100" as="geometry"/>
-        </mxCell>
-        
-        <!-- Agent Interface -->
-        <mxCell id="agent" value="Agent Interface&#xa;• Call Management&#xa;• AI Dashboard&#xa;• Live Insights" 
-                 style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f3e5f5;strokeColor=#4a148c;" 
-                 vertex="1" parent="1">
-          <mxGeometry x="450" y="150" width="150" height="100" as="geometry"/>
-        </mxCell>
-        
-        <!-- AI Processing Hub -->
-        <mxCell id="ai" value="AI Processing Hub&#xa;Port 5001&#xa;&#xa;🤖 OpenAI GPT-4o&#xa;🎤 Azure Speech&#xa;🧠 Real-time Analysis&#xa;⚡ Action Engine" 
-                 style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff3e0;strokeColor=#ef6c00;" 
-                 vertex="1" parent="1">
-          <mxGeometry x="225" y="350" width="200" height="120" as="geometry"/>
-        </mxCell>
-        
-        <!-- WebRTC Connection -->
-        <mxCell id="webrtc" value="" style="endArrow=classic;startArrow=classic;html=1;strokeWidth=3;strokeColor=#1565c0;" 
-                 edge="1" parent="1" source="customer" target="agent">
-          <mxGeometry width="50" height="50" relative="1" as="geometry">
-            <mxPoint x="300" y="200" as="sourcePoint"/>
-            <mxPoint x="350" y="150" as="targetPoint"/>
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="webrtc-label" value="WebRTC P2P Voice&#xa;~30-50ms latency" 
-                 style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;" 
-                 vertex="1" parent="1">
-          <mxGeometry x="275" y="120" width="100" height="40" as="geometry"/>
-        </mxCell>
-        
-        <!-- Audio Taps -->
-        <mxCell id="audio1" value="" style="endArrow=classic;html=1;strokeColor=#4caf50;strokeWidth=2;" 
-                 edge="1" parent="1" source="customer" target="ai">
-        </mxCell>
+## 🎯 Key Architecture Principles
+
+### WebRTC Peer-to-Peer Design
+```mermaid
+graph LR
+    subgraph "Traditional Server-Based"
+        U1A[User 1] --> SA[Server] --> U2A[User 2]
+        SA --> U1A
+        note1[Audio travels through server<br/>Higher latency, server load]
+    end
+    
+    subgraph "Sybil WebRTC P2P"
+        U1B[User 1] -.->|Direct Audio| U2B[User 2]
+        U1B --> SB[Signaling Server]
+        SB --> U2B
+        U2B -.->|Direct Audio| U1B
+        note2[Server only for setup<br/>Audio bypasses server]
+    end
+    
+    style SA fill:#ffcdd2
+    style SB fill:#c8e6c9
+    style note1 fill:#ffebee
+    style note2 fill:#e8f5e8
+```
+
+### Phone Number Processing Flow
+```mermaid
+graph TD
+    INPUT[User enters phone number]
+    --> NORMALIZE[Normalize international format]
+    --> VALIDATE[Validate number format]
+    --> FORMAT[Format for display<br/>+65 XXXX XXXX]
+    --> STORE[Store in call state]
+    --> SIGNAL[Use for Socket.IO room/identity]
+    
+    NORMALIZE -.-> SG[Singapore +65<br/>Special formatting]
+    NORMALIZE -.-> INTL[Other countries<br/>Standard formatting]
+    
+    style INPUT fill:#e3f2fd
+    style FORMAT fill:#e8f5e8
+    style SIGNAL fill:#fff3e0
+```
+
+## 📱 Mobile Compatibility Architecture
+
+### Audio Stream Handling
+- **getUserMedia()**: Works on mobile browsers (Chrome, Safari, Firefox)
+- **WebRTC MediaStream**: Direct audio transmission
+- **No Server Processing**: Audio never touches the server
+- **Low Latency**: Direct peer-to-peer connection
+
+### Mobile Considerations
+- **HTTPS Required**: WebRTC getUserMedia requires secure context
+- **Permission Handling**: Microphone access permissions
+- **Network Adaptation**: ICE servers for NAT traversal
+- **UI Responsiveness**: Touch-friendly interface
+
+## 🔧 Technical Implementation Details
+
+### File Structure
+```
+client/src/
+├── components/
+│   ├── LandingPage.tsx          # Main UI (all call states)
+│   └── shared/                  # Reusable components
+├── services/
+│   ├── socket.ts               # Socket.IO signaling
+│   └── webrtc.ts              # WebRTC peer connections
+└── main.tsx                   # App entry point
+
+server/
+└── index.js                  # Express + Socket.IO server
+```
+
+### Port Configuration
+- **Frontend**: Port 5173 (Vite dev server)
+- **Backend**: Port 5000 (Socket.IO signaling)
+- **Production**: Single port via static file serving
+
+### Environment Support
+- **Development**: Separate frontend/backend ports
+- **Production**: Backend serves frontend static files
+- **Deployment**: Railway, Render, Vercel compatible
+
+## 🌐 International Number Support
+
+### Formatting Examples
+```
+Input: "81234567"           → Output: "+65 8123 4567" (Singapore)
+Input: "+1234567890"        → Output: "+1 234 567 890" (US)
+Input: "+442071234567"      → Output: "+44 207 123 4567" (UK)
+Input: "+33123456789"       → Output: "+33 1 23 45 67 89" (France)
+```
+
+### Singapore Optimization
+- **Default Country**: Singapore (+65)
+- **Format**: "+65 XXXX XXXX"
+- **Validation**: 8-digit local numbers
+- **Demo Numbers**: Generated in Singapore format
+
+This architecture provides a clean, scalable, and international-ready voice calling solution with minimal server overhead and maximum audio quality through direct peer-to-peer WebRTC connections.
         <mxCell id="audio2" value="" style="endArrow=classic;html=1;strokeColor=#4caf50;strokeWidth=2;" 
                  edge="1" parent="1" source="agent" target="ai">
         </mxCell>

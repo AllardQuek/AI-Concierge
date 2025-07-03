@@ -2,59 +2,85 @@
 
 ## 🎯 Project Overview
 
-**Sybil** is an AI-enhanced voice conversation platform that provides peer-to-peer voice communication using phone number codes. Named after the prophetic oracles of ancient Greece, Sybil enables direct voice calling between users with a clean, modern interface.
+**Sybil** is a WebRTC-based voice calling platform that enables peer-to-peer voice communication using phone number codes. Named after the prophetic oracles of ancient Greece, Sybil provides a simple, clean interface for direct voice calling between users.
 
 ## 📊 Implementation Status
 
 ### ✅ **COMPLETED FEATURES**
 
 #### Core Voice Platform
-- **WebRTC P2P Voice Communication** - Ultra-low latency (30-50ms) between peers
+- **WebRTC P2P Voice Communication** - Direct peer-to-peer audio with ultra-low latency
 - **Socket.IO Signaling Server** - Real-time WebRTC negotiation and session management
-- **Phone Number Based Calling** - Users call each other using unique phone number codes
-- **Modern React Frontend** - TypeScript-based with Tailwind CSS styling
+- **Phone Number Based Calling** - Users call each other using Singapore (+65) phone number codes
+- **Modern React Frontend** - Single-page TypeScript app with Tailwind CSS styling
 - **Clean Call Interface** - Streamlined calling experience with mute/unmute controls
+- **Call Duration Timer** - Real-time call duration display during active calls
+- **Enter Key Support** - Quick call initiation with Enter key on phone number input
+- **Mobile Audio Support** - Full WebRTC audio compatibility on mobile devices
 
 ### 🔮 **FUTURE ENHANCEMENT OPPORTUNITIES**
 
-#### AI Integration Framework (Optional)
-- **AI Service Architecture** - Server-side AI processing for conversation analysis
-- **OpenAI Integration** - Real-time conversation insights and recommendations
-- **Audio Analysis** - Voice sentiment and conversation flow analysis
-- **Smart Recommendations** - Contextual suggestions during calls
-
-### � **NEXT STEPS FOR AI INTEGRATION**
-
-#### Configuration & Connection
-- **API Key Setup** - OpenAI and Azure Speech Services configuration
-- **Audio Pipeline Connection** - Link audio processing to AI service
-- **Real-time Data Flow** - Connect transcription to dashboard updates
-- **End-to-End Testing** - Validate complete AI-enhanced call flow
+#### Potential Extensions
+- **AI Integration** - Optional conversation analysis and insights
+- **Multi-region Numbers** - Support for phone number formats beyond Singapore
+- **Call History** - Track previous calls and contacts
+- **Group Calling** - Multi-party voice conferences
+- **Call Recording** - Optional audio recording capabilities
 
 ## 🏗️ Architecture Overview
 
 ### System Components
 
 ```
-Customer Interface  ◄═══ WebRTC P2P ═══► Agent Interface + AI Dashboard
-        │                                            │
-        └──── Audio Tap (AudioWorklet) ──────┐      │
-                                             │      │
-                                             ▼      ▼
-                                    AI Processing Hub
-                                         │
-                                         ├── Speech-to-Text
-                                         ├── LLM Analysis  
-                                         ├── Action Engine
-                                         └── Dashboard Updates
+User A Device  ◄═══ WebRTC P2P Audio ═══► User B Device
+      │                                        │
+      │                                        │
+      └────► Socket.IO Signaling Server ◄──────┘
+                    (Port 5000)
+                        │
+                 WebRTC Negotiation
+                 ICE Candidate Exchange
+                 Call State Management
 ```
 
 ### Key Design Principles
 
-1. **Parallel Processing** - AI analysis runs alongside voice communication without affecting latency
-2. **Non-blocking Architecture** - Voice quality maintained while AI provides insights
-3. **Real-time Insights** - Sub-second AI analysis and action recommendations
-4. **Extensible Framework** - Ready for advanced AI features and integrations
+1. **Peer-to-Peer Audio** - Direct WebRTC connection for minimal latency
+2. **Signaling Only Backend** - Server only handles call setup, not audio
+3. **Single-Page Experience** - All call states managed in one interface
+4. **Mobile-First Design** - Works seamlessly on mobile browsers
+5. **Simple Phone System** - Singapore numbers for easy demo and testing
+
+## 🔄 WebRTC P2P Audio Flow Explained
+
+### What Happens During a Call
+
+1. **Signaling Phase (Through Server)**:
+   ```
+   Caller ← Socket.IO → Server ← Socket.IO → Receiver
+   ```
+   - **Call initiation** (`call-user` event)
+   - **WebRTC offer/answer** exchange 
+   - **ICE candidates** for NAT traversal
+   - **Call status** updates (answered, declined, ended)
+
+2. **Audio Data Phase (Direct P2P)**:
+   ```
+   Caller ←── WebRTC Direct ──→ Receiver
+         (Real-time audio stream)
+   ```
+   - ✅ **Audio data** flows directly between browsers
+   - ✅ **No server involvement** in audio transmission
+   - ✅ **Ultra-low latency** (<50ms typical)
+   - ✅ **End-to-end encryption** (WebRTC DTLS/SRTP)
+
+### Benefits of This Architecture
+
+- **Lower Latency**: Audio doesn't bounce through server
+- **Better Quality**: No server-side audio processing/compression
+- **Scalability**: Server only handles lightweight signaling
+- **Privacy**: Audio never touches the server
+- **Bandwidth Efficiency**: Server doesn't handle audio data
 
 ## 📁 File Structure Summary
 
@@ -62,115 +88,100 @@ Customer Interface  ◄═══ WebRTC P2P ═══► Agent Interface + AI Da
 /Users/allard/Local-Projects/voice-bot/
 ├── client/                          # React Frontend (Port 3000)
 │   ├── src/components/
-│   │   ├── LandingPage.tsx          ✅ Role selection interface
-│   │   ├── CustomerInterface.tsx    ✅ Call request and audio controls
-│   │   ├── AgentInterface.tsx       ✅ Call management + AI dashboard
-│   │   └── AIDashboard.tsx          ✅ Live AI insights and actions
+│   │   ├── LandingPage.tsx          ✅ Main interface - all call states
+│   │   └── shared/                  ✅ Reusable UI components
 │   ├── src/services/
 │   │   ├── socket.ts                ✅ WebRTC signaling
-│   │   ├── webrtc.ts                ✅ P2P voice communication
-│   │   └── ai.ts                    ✅ AI service interface framework
+│   │   └── webrtc.ts                ✅ P2P voice communication
 │   └── public/
-│       └── audio-processor.js       ✅ AudioWorklet for real-time audio
+│       └── audio-processor.js       📋 AudioWorklet (unused currently)
 ├── server/                          # Backend Services
 │   ├── index.js                     ✅ WebRTC signaling server (Port 5000)
-│   └── ai-service.js                ✅ AI processing hub (Port 5001)
+│   └── ai-service.js                📋 AI processing hub (unused currently)
 └── docs/                            # Documentation
-    ├── ai-architecture.md           ✅ Detailed AI architecture
-    ├── visual-architecture.md       ✅ System diagrams and flows
-    ├── current-functionality-review.md  ✅ Feature analysis
-    └── activation-guide.md          ✅ Setup and deployment guide
+    ├── README.md                    ✅ Updated for current architecture
+    ├── project-summary.md           ✅ This file
+    └── *.md                         📋 Various docs (some outdated)
 ```
 
-## 🚀 Activation Steps (Next Actions)
+## 🚀 Getting Started
 
-### 1. **Environment Setup**
+### 1. **Install Dependencies**
 ```bash
-# Create server/.env
-OPENAI_API_KEY=your_key_here
-AZURE_SPEECH_KEY=your_key_here
-
-# Create client/.env  
-VITE_AI_SERVICE_URL=http://localhost:5001
+npm run install:all  # Install all dependencies
 ```
 
-### 2. **Start All Services**
+### 2. **Start Development**
 ```bash
-npm run install:all  # Install dependencies
-npm run dev          # Start all services
+npm run dev          # Start both client and server
 ```
 
-### 3. **Connect Audio Pipeline**
-- Link AudioWorklet to AI service WebSocket
-- Enable real-time audio streaming
-- Configure STT and LLM processing
+### 3. **Test the Application**
+- Open two browser tabs/devices to `http://localhost:3000`
+- Each tab gets a unique Singapore phone number (+65 XXXX XXXX)
+- Enter one number in the other tab and call
+- Test audio communication (requires different devices for audio feedback)
 
-### 4. **Test End-to-End Flow**
-- Customer initiates call → Agent answers
-- Audio streams to AI service for analysis
-- Dashboard shows live insights and recommendations
+## 📈 Performance & Technical Details
 
-## 📈 Performance Targets
+- **Voice Latency**: <50ms (WebRTC P2P direct connection)
+- **Signaling Latency**: <100ms for call setup
+- **Mobile Compatibility**: Full WebRTC support on modern mobile browsers
+- **Concurrent Calls**: Limited only by server resources (currently unbounded)
+- **Phone Number Format**: Singapore (+65) with 8-digit local numbers
 
-- **Voice Latency**: <50ms (WebRTC P2P, maintained)
-- **AI Response**: <1 second for actionable insights
-- **Concurrent Calls**: 100+ per server instance
-- **Memory Usage**: <2GB per 100 active sessions
+## 🔒 Security & Privacy
 
-## 🔒 Security & Compliance
+- **End-to-end Encryption** - WebRTC DTLS/SRTP for all audio streams
+- **No Audio Storage** - Server never handles or stores audio data
+- **Minimal Data Collection** - Only phone numbers for call routing
+- **HTTPS Required** - Production deployment requires HTTPS for WebRTC
+- **ICE Servers** - Configured for NAT traversal in production
 
-- **End-to-end encryption** for voice streams (WebRTC DTLS/SRTP)
-- **TLS 1.3** for all API communications
-- **PII detection and masking** in AI processing
-- **Configurable data retention** for compliance
-- **GDPR/CCPA ready** with audit logging
+## 🎯 Business Use Cases
 
-## 🎯 Business Value
+### Demo & Testing Platform
+- **WebRTC Demonstration** - Show P2P audio capabilities
+- **Phone System Prototype** - Simple calling interface testing
+- **Mobile Audio Testing** - Validate cross-device audio transmission
 
-### For Customer Service Teams
-- **Real-time assistance** during challenging calls
-- **Sentiment monitoring** to prevent escalations  
-- **Knowledge base integration** for instant answers
-- **Quality assurance** through conversation analysis
-
-### For Managers
-- **Live call monitoring** without joining calls
-- **Performance insights** and coaching opportunities
-- **Automated compliance** checking and reporting
-- **Scalable AI assistance** across all agents
+### Educational Use
+- **WebRTC Learning** - Study real-time communication implementation
+- **Socket.IO Signaling** - Understand WebRTC negotiation process
+- **React State Management** - Complex UI state handling patterns
 
 ## 📋 Technical Achievements
 
-1. **✅ Maintained Voice Quality** - AI integration doesn't affect call latency
-2. **✅ Parallel Processing** - Voice and AI pipelines run independently
-3. **✅ Real-time Architecture** - Sub-second AI insights during live calls
-4. **✅ Extensible Design** - Ready for additional AI features and integrations
-5. **✅ Production Ready** - Scalable architecture with proper error handling
+1. **✅ Single-Page Experience** - All call states in one cohesive interface
+2. **✅ Robust State Management** - Proper WebRTC connection lifecycle handling
+3. **✅ Mobile Audio Compatibility** - Full WebRTC support across devices
+4. **✅ Clean Phone Number System** - Singapore format with proper validation
+5. **✅ Production-Ready Signaling** - Stable Socket.IO WebRTC negotiation
 
-## 🔮 Future Enhancements
+## 🔮 Next Steps (Optional)
 
-### Near-term (1-2 months)
-- **Streaming STT** for faster transcription
-- **Custom AI prompts** for industry-specific use cases
-- **CRM integration** for automatic customer data lookup
-- **Advanced sentiment analysis** with emotion detection
+### Near-term Enhancements
+- **Call History UI** - Track and display recent calls
+- **Contact Management** - Save and organize frequent contacts
+- **International Numbers** - Support US, UK, and other formats
+- **Call Quality Indicators** - Show connection strength and quality
 
-### Long-term (3-6 months)
-- **Multi-language support** with auto-detection
-- **Voice biometrics** for customer authentication
-- **Predictive analytics** for call outcomes
-- **AI-powered call routing** based on customer intent
+### Advanced Features
+- **Group Calling** - Multi-party audio conferences
+- **Screen Sharing** - WebRTC video and screen share
+- **AI Integration** - Conversation analysis and insights
+- **Call Recording** - Optional audio recording with consent
 
 ## 🎉 Summary
 
-Sybil represents a successful integration of cutting-edge AI technology with reliable voice communication infrastructure. The platform maintains the essential simplicity and performance of peer-to-peer voice calls while adding powerful AI capabilities that enhance every conversation.
+Sybil demonstrates a clean, effective implementation of WebRTC peer-to-peer voice calling with a modern React interface. The application focuses on core functionality - making and receiving voice calls - without unnecessary complexity.
 
-**Current State**: All major components implemented and ready for activation
-**Next Step**: Configure API keys and connect the audio pipeline
-**Timeline**: Ready for production testing within days of configuration
+**Current State**: Fully functional P2P voice calling platform
+**Architecture**: Simple, robust, and easily extensible
+**Ready For**: Production deployment, demos, and further development
 
-The architecture demonstrates how AI can augment human conversations without compromising the core experience, providing agents with oracle-like wisdom to handle any customer interaction with confidence and insight.
+The platform proves that powerful real-time communication can be achieved with straightforward architecture, prioritizing reliability and user experience over complex features.
 
 ---
 
-*Sybil - Where human conversation meets AI wisdom*
+*Sybil - Simple. Direct. Connected.*

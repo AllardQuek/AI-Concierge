@@ -1,177 +1,125 @@
-# Sybil AI Activation Guide
+# Sybil - Quick Start Guide
 
-## 🚀 Quick Start Guide
+## 🚀 Getting Started
 
-This guide will help you activate the AI features in Sybil and complete the integration between the voice platform and AI assistance.
+This guide will help you set up and run the Sybil voice calling platform locally.
 
 ## 📋 Prerequisites
 
 - Node.js 18+ installed
-- OpenAI API key (for GPT-4o integration)
-- Azure Speech Services key (optional, for enhanced STT)
+- Modern web browser (Chrome, Firefox, Safari)
+- Microphone access permissions
 
-## 🔧 Step 1: Configure API Keys
-
-Create environment configuration files:
-
-### Server Environment (.env)
-```bash
-# Create server/.env file
-cd server
-cat > .env << EOF
-OPENAI_API_KEY=your_openai_api_key_here
-AZURE_SPEECH_KEY=your_azure_speech_key_here
-AZURE_SPEECH_REGION=your_azure_region
-NODE_ENV=development
-PORT=5000
-AI_SERVICE_PORT=5001
-EOF
-```
-
-### Client Environment (.env)
-```bash
-# Create client/.env file
-cd client
-cat > .env << EOF
-VITE_SERVER_URL=http://localhost:5000
-VITE_AI_SERVICE_URL=http://localhost:5001
-EOF
-```
-
-## 🔌 Step 2: Update Package Scripts
-
-The AI service should start automatically with the development server. Update the root `package.json`:
-
-```json
-{
-  "scripts": {
-    "dev": "concurrently \"npm run server:dev\" \"npm run ai:dev\" \"npm run client:dev\"",
-    "ai:dev": "cd server && node ai-service.js",
-    "server:dev": "cd server && npm run dev",
-    "client:dev": "cd client && npm run dev"
-  }
-}
-```
-
-## 🎤 Step 3: Connect Audio Pipeline
-
-Update `client/src/services/ai.ts` to enable real-time audio streaming:
-
-```typescript
-// Enable audio streaming to AI service
-export const connectAudioToAI = async (audioStream: MediaStream) => {
-  const audioContext = new AudioContext();
-  const source = audioContext.createMediaStreamSource(audioStream);
-  
-  // Connect to AudioWorklet processor
-  await audioContext.audioWorklet.addModule('/audio-processor.js');
-  const processor = new AudioWorkletNode(audioContext, 'audio-processor');
-  
-  // Connect processor to AI service
-  processor.port.onmessage = (event) => {
-    const { audioData } = event.data;
-    sendAudioChunkToAI(audioData);
-  };
-  
-  source.connect(processor);
-  processor.connect(audioContext.destination);
-};
-```
-
-## 🏃 Step 4: Start the Application
+## 🔧 Step 1: Install Dependencies
 
 ```bash
+# Clone the repository
+git clone <repository-url>
+cd voice-bot
+
 # Install all dependencies
 npm run install:all
-
-# Start all services (including AI)
-npm run dev
 ```
 
-This will start:
-- WebRTC Signaling Server (Port 5000)
-- AI Processing Service (Port 5001)
-- React Client (Port 3000)
+## � Step 2: Start the Application
 
-## ✅ Step 5: Test the Integration
+```bash
+# Start both client and server
+npm run dev
 
-1. **Open two browser windows**:
-   - Window 1: http://localhost:3000 (Customer)
-   - Window 2: http://localhost:3000 (Agent)
+# Or start individually:
+# npm run server:dev  # Starts server on port 5000
+# npm run client:dev  # Starts client on port 3000
+```
 
-2. **Initiate a call**:
-   - Customer: Click "Request Agent Call"
-   - Agent: Answer the incoming call
+## 🌐 Step 3: Access the Application
 
-3. **Verify AI features**:
-   - Speak into the microphone
-   - Check agent dashboard for real-time transcription
-   - Look for AI insights and action recommendations
-   - Verify sentiment analysis updates
+1. **Open your browser** to `http://localhost:3000`
+2. **Grant microphone permissions** when prompted
+3. **Enter a Singapore phone number** (format: +65 XXXX XXXX)
+4. **Click "Start Call"** to begin the voice connection
+
+## 📱 Testing Voice Calls
+
+### Single Device Testing
+1. Open two browser tabs/windows
+2. Enter different phone numbers in each
+3. Start calls to test the WebRTC connection
+
+### Multi-Device Testing
+1. Ensure both devices are on the same network
+2. Access the app from multiple devices
+3. Test voice quality and connection stability
+
+## 🔧 Configuration
+
+### Environment Variables (Optional)
+
+#### Server (.env in /server/)
+```bash
+PORT=5000
+NODE_ENV=development
+```
+
+#### Client (.env in /client/)
+```bash
+VITE_SERVER_URL=http://localhost:5000
+```
+
+## 🌐 Production Deployment
+
+For production deployment, see [DEPLOYMENT.md](./DEPLOYMENT.md) for platform-specific instructions.
 
 ## 🔍 Troubleshooting
 
-### AI Service Not Starting
-```bash
-# Check if AI service is running
-curl http://localhost:5001/health
+### Common Issues
 
-# Check logs
-cd server && node ai-service.js
+#### No Audio / Connection Failed
+- Check microphone permissions in browser
+- Ensure both client and server are running
+- Try refreshing the browser
+- Check browser console for WebRTC errors
+
+#### WebRTC Connection Issues
+- Verify firewall settings
+- Test with different browsers
+- Check network connectivity
+- Try incognito/private browsing mode
+
+#### Mobile Device Issues
+- Use HTTPS in production (required for mobile audio)
+- Test with Safari on iOS and Chrome on Android
+- Ensure mobile browser supports WebRTC
+
+### Debug Commands
+
+```bash
+# Check if ports are available
+lsof -i :3000
+lsof -i :5000
+
+# View server logs
+npm run server:dev
+
+# Check client build
+npm run client:build
 ```
 
-### Audio Not Streaming to AI
-- Verify microphone permissions
-- Check browser console for AudioWorklet errors
-- Ensure WebSocket connection to AI service
+## 📊 Browser Compatibility
 
-### No AI Insights Appearing
-- Verify OpenAI API key is correct
-- Check AI service logs for API errors
-- Ensure WebSocket connection between AI service and dashboard
+- ✅ **Chrome 80+**: Full WebRTC support
+- ✅ **Firefox 75+**: Full WebRTC support  
+- ✅ **Safari 14+**: WebRTC support (iOS 14.3+)
+- ✅ **Edge 80+**: Full WebRTC support
 
-## 📊 Performance Monitoring
+## 🔄 Development Workflow
 
-Monitor these key metrics:
-- Voice latency: <50ms (WebRTC)
-- AI response time: <1 second
-- Memory usage: <2GB per 100 sessions
-- CPU usage: <80% under load
+1. **Code Changes**: Edit files in `/client/src/` or `/server/`
+2. **Hot Reload**: Client automatically reloads on changes
+3. **Server Restart**: Server restarts automatically with nodemon
+4. **Testing**: Use browser developer tools for debugging
 
-## 🔒 Security Considerations
 
-- Store API keys in environment variables only
-- Enable HTTPS in production
-- Configure CORS properly for production domains
-- Implement rate limiting for API calls
-
-## 📈 Next Steps
-
-Once basic AI integration is working:
-
-1. **Enhance AI Analysis**:
-   - Add industry-specific prompts
-   - Implement custom action types
-   - Add integration with CRM systems
-
-2. **Optimize Performance**:
-   - Implement audio streaming
-   - Add LLM response caching
-   - Deploy edge computing for lower latency
-
-3. **Production Deployment**:
-   - Configure Azure/AWS infrastructure
-   - Set up monitoring and alerting
-   - Implement auto-scaling
-
-## 🆘 Support
-
-If you encounter issues:
-1. Check the troubleshooting section above
-2. Review logs in browser console and server terminal
-3. Verify all dependencies are installed correctly
-4. Ensure API keys are configured properly
-
----
-
-*Once activated, Sybil will provide real-time AI assistance during voice conversations, offering insights, action recommendations, and intelligent support to enhance customer service interactions.*
+   - Speak into the microphone
+   - Check agent dashboard for real-time transcription
+The application is now ready for voice calling between connected users!
