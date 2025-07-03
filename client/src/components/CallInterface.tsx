@@ -194,6 +194,9 @@ const CallInterface: React.FC = () => {
       console.log('🎤 Getting user media...');
       await webrtcRef.current.getUserMedia();
       
+      // Debug WebRTC state before creating offer
+      webrtcRef.current.debugState();
+      
       console.log('📝 Creating WebRTC offer...');
       const offer = await webrtcRef.current.createOffer();
       
@@ -336,6 +339,9 @@ const CallInterface: React.FC = () => {
       
       console.log('📞 Attempting to answer call...');
       
+      // Debug current WebRTC state
+      webrtcRef.current.debugState();
+      
       // Get the stored offer
       const offer = (window as any).incomingOffer;
       console.log('🔍 Looking for stored offer:', offer ? 'Found' : 'Not found');
@@ -368,7 +374,29 @@ const CallInterface: React.FC = () => {
       
     } catch (err) {
       console.error('❌ Failed to answer call:', err);
-      setError(`Failed to answer call: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      
+      // Provide more specific error messages for SDP issues
+      let errorMessage = 'Failed to answer call';
+      if (err instanceof Error) {
+        if (err.message.includes('m-lines')) {
+          errorMessage = 'Call connection issue - please try calling again';
+          // Also debug the WebRTC state for troubleshooting
+          if (webrtcRef.current) {
+            webrtcRef.current.debugState();
+          }
+        } else {
+          errorMessage = `Failed to answer call: ${err.message}`;
+        }
+      }
+      
+      setError(errorMessage);
+      
+      // Reset to waiting state so user can try again
+      setIsIncomingCall(false);
+      setCallState('waiting');
+      
+      // Clean up the stored offer on error
+      delete (window as any).incomingOffer;
     }
   };
 
@@ -419,7 +447,7 @@ const CallInterface: React.FC = () => {
     
     // Clean up WebRTC
     if (webrtcRef.current) {
-      webrtcRef.current.cleanup();
+      webrtcRef.current.terminateCall();
       webrtcRef.current = null;
     }
     

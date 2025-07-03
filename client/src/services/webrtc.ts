@@ -129,6 +129,16 @@ export class WebRTCService {
       this.initializePeerConnection();
     }
 
+    // Check signaling state
+    const currentState = this.peerConnection!.signalingState;
+    console.log('WebRTC: Current signaling state before createOffer:', currentState);
+    
+    // If we're not in a stable state, reset the connection
+    if (currentState !== 'stable') {
+      console.log('WebRTC: Non-stable state detected, resetting peer connection...');
+      await this.resetPeerConnection();
+    }
+
     // Ensure we have a local stream
     if (!this.localStream) {
       console.log('No local stream, getting user media...');
@@ -139,9 +149,15 @@ export class WebRTCService {
       throw new Error('Failed to initialize peer connection');
     }
 
-    const offer = await this.peerConnection.createOffer();
-    await this.peerConnection.setLocalDescription(offer);
-    return offer;
+    try {
+      const offer = await this.peerConnection.createOffer();
+      await this.peerConnection.setLocalDescription(offer);
+      console.log('WebRTC: Created offer, signaling state:', this.peerConnection.signalingState);
+      return offer;
+    } catch (error) {
+      console.error('WebRTC: Error creating offer:', error);
+      throw error;
+    }
   }
 
   // Create answer for responding to offer
@@ -150,18 +166,51 @@ export class WebRTCService {
       throw new Error('Peer connection not initialized');
     }
 
+    // Check if we're in a valid state for setting remote description
+    const currentState = this.peerConnection.signalingState;
+    console.log('WebRTC: Current signaling state before setRemoteDescription:', currentState);
+    
+    // If we're not in 'stable' or 'have-local-offer' state, we need to reset
+    if (currentState !== 'stable' && currentState !== 'have-local-offer') {
+      console.log('WebRTC: Invalid state for setRemoteDescription, resetting peer connection...');
+      await this.resetPeerConnection();
+    }
+
     // Ensure we have a local stream before creating answer
     if (!this.localStream) {
       console.log('No local stream when creating answer, getting user media...');
       await this.getUserMedia();
     }
 
-    await this.peerConnection.setRemoteDescription(offer);
-    const answer = await this.peerConnection.createAnswer();
-    await this.peerConnection.setLocalDescription(answer);
-    
-    console.log('Created answer with local tracks:', this.localStream?.getTracks().length || 0);
-    return answer;
+    try {
+      // Set remote description
+      console.log('WebRTC: Setting remote offer description...');
+      await this.peerConnection.setRemoteDescription(offer);
+      
+      // Create and set local answer
+      console.log('WebRTC: Creating answer...');
+      const answer = await this.peerConnection.createAnswer();
+      await this.peerConnection.setLocalDescription(answer);
+      
+      console.log('WebRTC: Created answer with local tracks:', this.localStream?.getTracks().length || 0);
+      console.log('WebRTC: Final signaling state:', this.peerConnection.signalingState);
+      
+      return answer;
+    } catch (error) {
+      console.error('WebRTC: Error in createAnswer:', error);
+      // If we get an SDP error, try resetting and retrying once
+      if (error instanceof Error && error.message.includes('m-lines')) {
+        console.log('WebRTC: SDP m-lines error detected, attempting recovery...');
+        await this.resetPeerConnection();
+        // Retry once with fresh peer connection
+        await this.getUserMedia();
+        await this.peerConnection!.setRemoteDescription(offer);
+        const retryAnswer = await this.peerConnection!.createAnswer();
+        await this.peerConnection!.setLocalDescription(retryAnswer);
+        return retryAnswer;
+      }
+      throw error;
+    }
   }
 
   // Set remote answer
@@ -170,7 +219,48 @@ export class WebRTCService {
       throw new Error('Peer connection not initialized');
     }
 
-    await this.peerConnection.setRemoteDescription(answer);
+    // Check signaling state before setting remote description
+    const currentState = this.peerConnection.signalingState;
+    console.log('WebRTC: Current signaling state before setRemoteAnswer:', currentState);
+    
+    if (currentState !== 'have-local-offer') {
+      console.warn('WebRTC: Unexpected signaling state for setRemoteAnswer:', currentState);
+      // Don't throw error, but log for debugging
+    }
+
+    try {
+      await this.peerConnection.setRemoteDescription(answer);
+      console.log('WebRTC: Remote answer set successfully, final state:', this.peerConnection.signalingState);
+    } catch (error) {
+      console.error('WebRTC: Error setting remote answer:', error);
+      throw error;
+    }
+  }
+
+  // Reset peer connection to clean state
+  private async resetPeerConnection(): Promise<void> {
+    console.log('WebRTC: Resetting peer connection to clean state...');
+    
+    // Store current stream reference
+    const currentStream = this.localStream;
+    
+    // Close current peer connection
+    if (this.peerConnection) {
+      this.peerConnection.close();
+    }
+    
+    // Create new peer connection
+    this.initializePeerConnection();
+    
+    // Re-add tracks if we had a stream
+    if (currentStream && this.peerConnection) {
+      currentStream.getTracks().forEach(track => {
+        console.log('WebRTC: Re-adding track to fresh peer connection:', track.kind, track.id);
+        this.peerConnection!.addTrack(track, currentStream);
+      });
+    }
+    
+    console.log('WebRTC: Peer connection reset complete');
   }
 
   // Add ICE candidate
@@ -233,8 +323,19 @@ export class WebRTCService {
 
   // Clean up resources
   cleanup(): void {
+    console.log('WebRTC: Starting cleanup...');
+    
+    // Clear any pending operations
+    if (this.peerConnection) {
+      console.log('WebRTC: Cleanup - signaling state:', this.peerConnection.signalingState);
+      console.log('WebRTC: Cleanup - connection state:', this.peerConnection.connectionState);
+    }
+    
     if (this.localStream) {
-      this.localStream.getTracks().forEach(track => track.stop());
+      this.localStream.getTracks().forEach(track => {
+        console.log('WebRTC: Stopping local track:', track.kind, track.id);
+        track.stop();
+      });
       this.localStream = null;
     }
 
@@ -247,14 +348,22 @@ export class WebRTCService {
     }
 
     if (this.peerConnection) {
+      // Remove all event listeners to prevent callbacks after cleanup
+      this.peerConnection.ontrack = null;
+      this.peerConnection.onicecandidate = null;
+      this.peerConnection.onconnectionstatechange = null;
+      this.peerConnection.onicegatheringstatechange = null;
+      this.peerConnection.oniceconnectionstatechange = null;
+      
       this.peerConnection.close();
       this.peerConnection = null;
     }
 
     this.remoteStream = null;
     
-    // Reinitialize for next call
+    // Reinitialize for next call with a fresh state
     this.initializePeerConnection();
+    console.log('WebRTC: Cleanup complete, fresh peer connection ready');
   }
 
   // Get connection state
@@ -405,5 +514,38 @@ export class WebRTCService {
   // Check if user interaction has occurred (useful for UI feedback)
   hasUserInteracted(): boolean {
     return this.userInteractionOccurred;
+  }
+
+  // Debug method to check current WebRTC state
+  debugState(): void {
+    if (this.peerConnection) {
+      console.log('🔍 WebRTC Debug State:');
+      console.log('  - Signaling State:', this.peerConnection.signalingState);
+      console.log('  - Connection State:', this.peerConnection.connectionState);
+      console.log('  - ICE Connection State:', this.peerConnection.iceConnectionState);
+      console.log('  - ICE Gathering State:', this.peerConnection.iceGatheringState);
+      console.log('  - Local Stream:', this.localStream ? `${this.localStream.getTracks().length} tracks` : 'None');
+      console.log('  - Remote Stream:', this.remoteStream ? `${this.remoteStream.getTracks().length} tracks` : 'None');
+    } else {
+      console.log('🔍 WebRTC Debug State: No peer connection');
+    }
+  }
+
+  // Gracefully terminate call
+  async terminateCall(): Promise<void> {
+    console.log('WebRTC: Terminating call gracefully...');
+    
+    if (this.peerConnection) {
+      const currentState = this.peerConnection.signalingState;
+      console.log('WebRTC: Terminating call in state:', currentState);
+      
+      // If we're in the middle of negotiation, wait briefly before cleanup
+      if (currentState === 'have-local-offer' || currentState === 'have-remote-offer') {
+        console.log('WebRTC: Waiting for negotiation to complete before termination...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+    
+    this.cleanup();
   }
 }
