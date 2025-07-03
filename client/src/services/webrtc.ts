@@ -13,6 +13,9 @@ export class WebRTCService {
   private iceServers = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    // TURN servers can be added later if needed for users behind restrictive NATs
+    // Most iPhone-to-iPhone calls work fine with just STUN servers
   ];
 
   constructor() {

@@ -3,7 +3,7 @@ import { PhoneIcon, Button, ConnectionStatus, ErrorMessage } from './shared';
 import { SocketService } from '../services/socket';
 import { WebRTCService } from '../services/webrtc';
 
-type CallState = 'idle' | 'outgoing' | 'incoming' | 'connected' | 'ended';
+type CallState = 'idle' | 'outgoing' | 'incoming' | 'connected';
 
 const LandingPage: React.FC = () => {
   const [friendNumber, setFriendNumber] = useState('');
@@ -227,19 +227,15 @@ const LandingPage: React.FC = () => {
     };
   }, []);
 
-  // Auto-return to idle state after call ends
+  // Auto-cleanup when call returns to idle after being connected
   useEffect(() => {
-    if (callState === 'ended') {
+    // This effect ensures proper cleanup when transitioning from connected to idle
+    if (callState === 'idle' && currentCallPartner) {
       stopCallDurationTimer(); // Stop timer when call ends
-      const timer = setTimeout(() => {
-        setCallState('idle');
-        setCurrentCallPartner('');
-        setError('');
-      }, 3000); // Return to idle after 3 seconds
-      
-      return () => clearTimeout(timer);
+      setCurrentCallPartner('');
+      setError('');
     }
-  }, [callState]);
+  }, [callState, currentCallPartner]);
 
   const startRingingEffect = () => {
     // Try to vibrate on mobile devices
@@ -329,9 +325,9 @@ const LandingPage: React.FC = () => {
           callTimeoutRef.current = null;
         }
       } else if (state === 'disconnected' || state === 'failed') {
-        if (callState !== 'ended') { // Avoid duplicate disconnect handling
+        if (callState !== 'idle') { // Avoid duplicate disconnect handling
           console.log('🔗 WebRTC connection lost');
-          setCallState('ended');
+          setCallState('idle');
           setError('Connection lost');
         }
         stopCallDurationTimer(); // Stop timing when disconnected
@@ -364,14 +360,14 @@ const LandingPage: React.FC = () => {
 
     socketRef.current.on('call-declined', () => {
       console.log('📞 Call was declined');
-      setCallState('ended');
+      setCallState('idle');
       setError('Call was declined');
       clearTimeout(callTimeoutRef.current!); // Clear connection timeout
     });
 
     socketRef.current.on('call-ended', ({ fromCode }: { fromCode: string }) => {
       console.log(`📞 Call ended by ${fromCode}`);
-      setCallState('ended');
+      setCallState('idle');
       setError('Call ended by other party');
       clearTimeout(callTimeoutRef.current!); // Clear connection timeout
     });
@@ -430,7 +426,7 @@ const LandingPage: React.FC = () => {
     } catch (err) {
       console.error('❌ Failed to answer call:', err);
       setError(`Failed to answer call: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      setCallState('ended');
+      setCallState('idle');
     }
   };
 
@@ -482,7 +478,7 @@ const LandingPage: React.FC = () => {
       callTimeoutRef.current = window.setTimeout(() => {
         console.log('⏰ Call connection timeout');
         setError('Connection timeout - please try again');
-        setCallState('ended');
+        setCallState('idle');
       }, 30000); // 30 second timeout
       
       // Get user media and create offer
@@ -505,7 +501,7 @@ const LandingPage: React.FC = () => {
       
     } catch (err) {
       setError(`Failed to initiate call: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      setCallState('ended');
+      setCallState('idle');
     }
   };
 
@@ -543,17 +539,35 @@ const LandingPage: React.FC = () => {
   const cleanup = () => {
     console.log('🧹 Cleaning up call services...');
     
-    // Clear any timeouts and timers
+    // Clear all timers and timeouts
     if (callTimeoutRef.current) {
       clearTimeout(callTimeoutRef.current);
       callTimeoutRef.current = null;
     }
-    stopCallDurationTimer();
     
-    // Clean up WebRTC
+    if (callDurationIntervalRef.current) {
+      clearInterval(callDurationIntervalRef.current);
+      callDurationIntervalRef.current = null;
+    }
+    
+    if (ringIntervalRef.current) {
+      clearInterval(ringIntervalRef.current);
+      ringIntervalRef.current = null;
+    }
+    
+    // Clean up WebRTC resources
     if (webrtcRef.current) {
       webrtcRef.current.cleanup();
       webrtcRef.current = null;
+    }
+    
+    // Clean up socket event listeners
+    if (socketRef.current) {
+      socketRef.current.off('user-calling');
+      socketRef.current.off('call-answered');
+      socketRef.current.off('call-declined');
+      socketRef.current.off('call-ended');
+      socketRef.current.off('ice-candidate');
     }
     
     // Clean up any stored offers
@@ -561,10 +575,36 @@ const LandingPage: React.FC = () => {
       delete (window as any).incomingOffer;
     }
     
-    // Stop the call duration timer
-    stopCallDurationTimer();
+    // Reset call-related state
+    setCallDuration(0);
+    setIsMuted(false);
+    setIsRinging(false);
     
     console.log('✅ Call cleanup completed');
+  };
+
+  // Error recovery function - allows recovery without page reload
+  const recoverFromError = async () => {
+    console.log('🔄 Recovering from error...');
+    
+    // Clean up everything
+    cleanup();
+    
+    // Reset state
+    setCallState('idle');
+    setCurrentCallPartner('');
+    setError('');
+    
+    // Reinitialize services if needed
+    try {
+      if (!socketRef.current) {
+        await initializeCallServices();
+      }
+      console.log('✅ Recovery completed');
+    } catch (err) {
+      console.error('❌ Recovery failed:', err);
+      setError('Recovery failed - please refresh the page');
+    }
   };
 
   const copyMyNumber = async () => {
@@ -756,8 +796,16 @@ const LandingPage: React.FC = () => {
 
               {/* Error Display */}
               {error && (
-                <div className="mb-6">
+                <div className="mb-6 space-y-3">
                   <ErrorMessage message={error} />
+                  <Button
+                    onClick={recoverFromError}
+                    variant="secondary"
+                    size="small"
+                    className="mx-auto"
+                  >
+                    🔄 Try Again
+                  </Button>
                 </div>
               )}
 
@@ -883,35 +931,6 @@ const LandingPage: React.FC = () => {
                       📞 End Call
                     </Button>
                   </div>
-                </div>
-              )}
-
-              {/* Call Ended Interface */}
-              {callState === 'ended' && (
-                <div className="text-center space-y-6">
-                  <div className="flex items-center justify-center mb-4">
-                    <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center">
-                      <span className="text-3xl">📵</span>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-2xl font-bold text-gray-800 mb-2">📵 Call Ended</h3>
-                    <p className="text-lg text-gray-600">The call has been disconnected</p>
-                    {error && (
-                      <p className="text-sm text-gray-500 mt-2">{error}</p>
-                    )}
-                  </div>
-
-                  <Button
-                    onClick={() => setCallState('idle')}
-                    variant="primary"
-                    size="large"
-                    fullWidth
-                    className="flex items-center justify-center gap-2"
-                  >
-                    🏠 Back to Home
-                  </Button>
                 </div>
               )}
             </div>
