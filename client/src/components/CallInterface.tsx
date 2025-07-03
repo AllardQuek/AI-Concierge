@@ -16,12 +16,15 @@ const CallInterface: React.FC = () => {
   const [friendNumber, setFriendNumber] = useState('');
   const [isIncomingCall, setIsIncomingCall] = useState(false);
   const [incomingCallerNumber, setIncomingCallerNumber] = useState('');
+  const [callDuration, setCallDuration] = useState(0); // Call duration in seconds
+  const [callStartTime, setCallStartTime] = useState<number | null>(null);
   
   const webrtcRef = useRef<WebRTCService | null>(null);
   const socketRef = useRef<SocketService | null>(null);
   const localAudioRef = useRef<HTMLAudioElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const callTimeoutRef = useRef<number | null>(null);
+  const callTimerRef = useRef<number | null>(null);
 
   // Get params from URL
   const toNumber = searchParams.get('to');
@@ -90,12 +93,48 @@ const CallInterface: React.FC = () => {
     return formattedNumber;
   };
 
+  // Format call duration as MM:SS
+  const formatCallDuration = (seconds: number): string => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
   useEffect(() => {
     initializeCall();
     return () => {
       cleanup();
     };
   }, []);
+
+  // Effect to handle call duration timer
+  useEffect(() => {
+    if (callState === 'connected' && !callStartTime) {
+      // Call just connected, start the timer
+      const startTime = Date.now();
+      setCallStartTime(startTime);
+      console.log('⏱️ Call timer started');
+      
+      callTimerRef.current = window.setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        setCallDuration(elapsed);
+      }, 1000);
+    } else if (callState !== 'connected' && callTimerRef.current) {
+      // Call ended or not connected, stop the timer
+      console.log('⏱️ Call timer stopped');
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+      setCallStartTime(null);
+      setCallDuration(0);
+    }
+
+    return () => {
+      if (callTimerRef.current) {
+        clearInterval(callTimerRef.current);
+        callTimerRef.current = null;
+      }
+    };
+  }, [callState, callStartTime]);
 
   const initializeCall = async () => {
     try {
@@ -445,6 +484,16 @@ const CallInterface: React.FC = () => {
       callTimeoutRef.current = null;
     }
     
+    // Clear call duration timer
+    if (callTimerRef.current) {
+      clearInterval(callTimerRef.current);
+      callTimerRef.current = null;
+    }
+    
+    // Reset timer state
+    setCallDuration(0);
+    setCallStartTime(null);
+    
     // Clean up WebRTC
     if (webrtcRef.current) {
       webrtcRef.current.terminateCall();
@@ -545,7 +594,11 @@ const CallInterface: React.FC = () => {
             <div className="text-center space-y-6">
               <div className="p-6 bg-green-50 rounded-lg border border-green-200">
                 <h3 className="text-xl font-semibold text-green-800 mb-2">🔊 Active Call</h3>
-                <p className="text-green-700">Connected to: <span className="font-mono font-bold">{friendNumber}</span></p>
+                <p className="text-green-700 mb-3">Connected to: <span className="font-mono font-bold">{friendNumber}</span></p>
+                <div className="text-2xl font-mono font-bold text-green-800 bg-green-100 py-2 px-4 rounded-lg inline-block mb-2">
+                  ⏱️ {formatCallDuration(callDuration)}
+                </div>
+                <p className="text-sm text-green-600">Call duration</p>
               </div>
               <div className="flex gap-4">
                 <Button
