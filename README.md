@@ -1,102 +1,87 @@
-# Sybil - AI-Powered Voice Conversation Platform
+# Sybil - WebRTC Voice Calling Platform
 
-![Version](https://img.shields.io/badge/version-1.0.0--beta-blue)
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)
 ![React](https://img.shields.io/badge/react-18.2.0-blue)
 ![TypeScript](https://img.shields.io/badge/typescript-5.0-blue)
 
-An intelligent voice conversation platform featuring agentic AI assistance, built with React (TypeScript), Node.js, and Socket.IO. Named after the prophetic oracles of ancient Greece, Sybil provides AI-enhanced voice conversations with real-time insights and intelligent assistance.
+A modern voice calling platform built with React (TypeScript), Node.js, and WebRTC. Named after the prophetic oracles of ancient Greece, Sybil provides direct peer-to-peer voice communication using phone number identifiers.
 
 ## 🎯 Current Status
 
-- ✅ **Core Voice Platform**: WebRTC P2P communication (30-50ms latency)
-- ✅ **AI Architecture**: Complete AI service framework with OpenAI GPT-4o integration
-- ✅ **Frontend Components**: Customer & Agent interfaces with AI dashboard
-- ✅ **Real-time Processing**: AudioWorklet for audio chunking and analysis
-- ⚠️ **Activation Pending**: API key configuration and pipeline connection needed
+- ✅ **Core Voice Platform**: WebRTC P2P communication with ultra-low latency
+- ✅ **Phone Number System**: Singapore (+65) number generation and international support
+- ✅ **Single-Page Interface**: Streamlined calling experience with all states managed
+- ✅ **Mobile-Friendly**: Touch-optimized interface with vibration support
+- ✅ **Multi-Tab Support**: Each browser tab gets its own unique phone number
 
 ## 🔮 About Sybil
 
-Named after the prophetic oracles of ancient Greece, Sybil listens to conversations and provides wise guidance. Our AI assistant offers prophetic insights to help facilitate better communication between customers and agents.
+Named after the prophetic oracles of ancient Greece, Sybil provides a simple yet powerful voice calling experience. Users get assigned virtual phone numbers and can call each other directly through their browsers using WebRTC technology.
 
 ## 🚀 Features
 
-- **Oracle-Enhanced Conversations**: AI assistant with prophetic insights and guidance
-- **Real-time Voice Communication**: High-quality peer-to-peer voice chat using WebRTC
-- **Prophetic Understanding**: AI that listens and anticipates conversation needs
-- **Modern UI**: Clean, responsive interface built with React and Tailwind CSS
-- **Smart Call Management**: AI-powered routing with oracle wisdom
-- **Audio Controls**: Mute/unmute functionality with visual indicators
-- **Connection Status**: Real-time connection and call state monitoring
+- **Phone Number Based Calling**: Each user gets a virtual Singapore phone number (+65 format)
+- **Direct P2P Voice Communication**: Audio streams directly between users (no server relay)
+- **WebRTC Technology**: Ultra-low latency voice transmission
+- **Modern Single-Page Interface**: All call states managed in one clean interface
+- **International Number Support**: Smart formatting for Singapore, US, UK, and other countries
+- **Enter Key Support**: Quick calling by pressing Enter in the phone input
+- **Real-Time Call Management**: Incoming calls, call duration, mute/unmute functionality
+- **Mobile Optimized**: Vibration feedback and touch-friendly controls
+- **Multi-Tab Friendly**: Each browser tab gets its own unique number
+- **Connection Status**: Real-time connection and availability indicators
 - **TypeScript**: Full type safety across the entire application
 - **Responsive Design**: Works seamlessly on desktop and mobile devices
 
-## 🛠 Tech Stack
+## 🏗️ Architecture
+
+### WebRTC Peer-to-Peer Communication
+
+```
+User A Browser ←──── WebRTC Direct ────→ User B Browser
+       │                                        │
+       └── Socket.IO ──→ Server ←── Socket.IO ──┘
+           (Signaling Only)
+```
+
+**Key Architecture Points:**
+- **Server Role**: Only handles signaling (call setup, ICE candidates, call status)
+- **Audio Data**: Flows directly peer-to-peer between browsers (never touches server)
+- **Benefits**: Lower latency, better quality, server scalability, enhanced privacy
+
+### What Goes Through the Server (Socket.IO):
+- ✅ Call initiation requests
+- ✅ WebRTC offer/answer exchange
+- ✅ ICE candidates for NAT traversal
+- ✅ Call status updates (answered, declined, ended)
+
+### What Goes Peer-to-Peer (WebRTC):
+- 🎙️ **Audio data** (real-time voice streams)
+- � **All media content**
+- 📱 **Direct browser-to-browser communication**
+
+## �🛠 Tech Stack
 
 ### Frontend
 - **React 18** with TypeScript
 - **Vite** for fast development and building
 - **Tailwind CSS** for modern styling
-- **Socket.IO Client** for real-time communication
+- **WebRTC API** for peer-to-peer audio
+- **Socket.IO Client** for signaling
 
 ### Backend
 - **Node.js** with Express
-- **Socket.IO** for WebRTC signaling
+- **Socket.IO** for WebRTC signaling only
 - **CORS** enabled for cross-origin requests
-- **UUID** for unique room generation
 
 ## 📋 Prerequisites
 
-- **Node.js** 18+ (your current version is too old)
+- **Node.js** 18+ 
 - **npm** or **yarn**
 - **Modern browser** with WebRTC support (Chrome, Firefox, Safari, Edge)
-
-## 🚨 Important: Update Node.js
-
-Your current Node.js version (12.11.1) is too old. Please update to Node.js 18 or higher:
-
-### Using NVM (Recommended)
-```bash
-# Install the latest LTS version
-nvm install --lts
-nvm use --lts
-
-# Or install a specific version
-nvm install 18
-nvm use 18
-```
-
-### Using Official Installer
-Download from [nodejs.org](https://nodejs.org/) and install Node.js 18 LTS or higher.
-
-## 🔧 Installation
-
-After updating Node.js, follow these steps:
-
-1. **Clone and navigate to the project**:
-   ```bash
-   cd /Users/allard/Local-Projects/voice-bot
-   ```
-
-2. **Install all dependencies**:
-   ```bash
-   npm run install:all
-   ```
-   
-   Or install manually:
-   ```bash
-   # Root dependencies
-   npm install
-   
-   # Server dependencies
-   cd server && npm install
-   
-   # Client dependencies
-   cd ../client && npm install
-   ```
-
-## 🚀 Running the Application
+- **HTTPS** (required for WebRTC getUserMedia in production)
 
 ### Development Mode (Recommended)
 Run both server and client simultaneously:
