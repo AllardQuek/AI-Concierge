@@ -13,12 +13,12 @@ export class WebRTCService {
   private iceServers = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
+    // { urls: 'stun:stun2.l.google.com:19302' },
+    // { urls: 'stun:stun3.l.google.com:19302' },
+    // { urls: 'stun:stun4.l.google.com:19302' },
     // Additional STUN servers for better mobile connectivity
-    { urls: 'stun:stun.stunprotocol.org:3478' },
-    { urls: 'stun:stun.ekiga.net' },
+    // { urls: 'stun:stun.stunprotocol.org:3478' },
+    // { urls: 'stun:stun.ekiga.net' },
     // TURN servers can be added here for users behind restrictive NATs
     // Most mobile-to-mobile calls work with STUN, but TURN helps with corporate networks
   ];

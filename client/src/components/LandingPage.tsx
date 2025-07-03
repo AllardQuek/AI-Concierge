@@ -170,10 +170,21 @@ const LandingPage: React.FC = () => {
         
         // Listen for incoming calls
         socketRef.current.on('user-calling', ({ callerCode, offer }: { callerCode: string; offer?: RTCSessionDescriptionInit }) => {
-          console.log(`📞 Incoming call from "${callerCode}"`, offer ? 'with offer' : 'without offer');
+          console.log(`\n📞 === INCOMING CALL DEBUG ===`);
+          console.log(`📱 Incoming call FROM: "${callerCode}"`);
+          console.log(`📱 Incoming call TO: "${userNumber}"`);
+          console.log(`📋 Offer provided: ${offer ? 'YES' : 'NO'}`);
+          console.log(`🕐 Timestamp: ${new Date().toISOString()}`);
+          console.log(`📱 User agent: ${navigator.userAgent}`);
+          
+          if (offer) {
+            console.log(`📋 Offer type: ${offer.type}`);
+            console.log(`📋 Offer SDP length: ${offer.sdp ? offer.sdp.length : 0} characters`);
+          }
           
           // Add a small delay to ensure the call is properly established
           setTimeout(() => {
+            console.log(`⏰ Setting up incoming call state...`);
             setCurrentCallPartner(callerCode);
             setCallState('incoming');
             setIsRinging(true);
@@ -182,10 +193,14 @@ const LandingPage: React.FC = () => {
             if (offer) {
               (window as any).incomingOffer = offer;
               console.log('💾 Stored incoming offer for later use');
+            } else {
+              console.log('⚠️  No offer provided with incoming call');
             }
             
             // Start ringing sound effect (vibration on mobile)
             startRingingEffect();
+            console.log(`✅ Incoming call setup completed for ${callerCode}`);
+            console.log(`📞 === END INCOMING CALL DEBUG ===\n`);
           }, 500); // 500ms delay to ensure proper setup
         });
         
