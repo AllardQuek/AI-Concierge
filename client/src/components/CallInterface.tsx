@@ -23,7 +23,6 @@ const CallInterface: React.FC = () => {
   const webrtcRef = useRef<WebRTCService | null>(null);
   const socketRef = useRef<SocketService | null>(null);
   const localAudioRef = useRef<HTMLAudioElement>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const callTimeoutRef = useRef<number | null>(null);
   const callTimerRef = useRef<number | null>(null);
 
@@ -64,18 +63,12 @@ const CallInterface: React.FC = () => {
       return existingNumber;
     }
     
-    // Generate a new unique number for this session
-    const countries = [
-      { code: '+65', pattern: () => `${Math.random() > 0.5 ? '8' : '9'}${Array.from({length: 7}, () => Math.floor(Math.random() * 10)).join('')}` }, // Singapore
-      { code: '+1', pattern: () => `${Math.floor(Math.random() * 900) + 100}${Array.from({length: 7}, () => Math.floor(Math.random() * 10)).join('')}` }, // US/Canada
-      { code: '+44', pattern: () => `7${Array.from({length: 9}, () => Math.floor(Math.random() * 10)).join('')}` }, // UK
-      { code: '+61', pattern: () => `4${Array.from({length: 8}, () => Math.floor(Math.random() * 10)).join('')}` }, // Australia
-      { code: '+33', pattern: () => `6${Array.from({length: 8}, () => Math.floor(Math.random() * 10)).join('')}` }, // France
-    ];
-    
-    const country = countries[Math.floor(Math.random() * countries.length)];
-    const number = country.pattern();
-    const formattedNumber = `${country.code} ${number.substring(0, 3)} ${number.substring(3)}`;
+    // Generate a new Singapore phone number for this session
+    // Singapore mobile numbers start with 8 or 9 and have 8 digits total
+    const prefix = Math.random() > 0.5 ? '8' : '9';
+    const remainingDigits = Array.from({length: 7}, () => Math.floor(Math.random() * 10)).join('');
+    const number = prefix + remainingDigits;
+    const formattedNumber = `+65 ${number.substring(0, 4)} ${number.substring(4)}`;
     
     // Store in session storage for this tab
     sessionStorage.setItem(sessionKey, formattedNumber);
@@ -362,6 +355,20 @@ const CallInterface: React.FC = () => {
     console.log('🔗 Setting up WebRTC listeners...');
     setWebrtcListenersSetup(true);
 
+    // Handle remote stream when it arrives
+    webrtcRef.current.onRemoteStream((stream: MediaStream) => {
+      console.log('🔊 Remote stream received:', stream.getTracks().length, 'tracks');
+      stream.getTracks().forEach(track => {
+        console.log(`🔊 Remote track received: ${track.kind}, enabled: ${track.enabled}, readyState: ${track.readyState}`);
+      });
+      
+      // The WebRTC service handles audio element creation and playback internally
+      // Just ensure audio context is ready for mobile
+      webrtcRef.current?.ensureMobileAudioReady().catch(error => {
+        console.warn('🔇 Failed to ensure mobile audio ready:', error);
+      });
+    });
+
     webrtcRef.current.onConnectionStateChange((state: string) => {
       console.log('🔗 WebRTC connection state changed to:', state);
       console.log('🔗 Current call state:', callState);
@@ -454,6 +461,13 @@ const CallInterface: React.FC = () => {
       setCallState('connected');
       setFriendNumber(incomingCallerNumber);
       
+      // Ensure audio is ready for mobile after answering
+      setTimeout(() => {
+        if (webrtcRef.current) {
+          webrtcRef.current.ensureMobileAudioReady();
+        }
+      }, 1000);
+      
       // Clean up the stored offer
       delete (window as any).incomingOffer;
       
@@ -516,6 +530,8 @@ const CallInterface: React.FC = () => {
 
   const toggleMute = () => {
     if (webrtcRef.current) {
+      // Ensure audio context is ready on user interaction
+      webrtcRef.current.ensureMobileAudioReady();
       webrtcRef.current.toggleMute();
       setIsMuted(!isMuted);
     }
@@ -626,7 +642,13 @@ const CallInterface: React.FC = () => {
                   ❌ Decline
                 </Button>
                 <Button
-                  onClick={answerCall}
+                  onClick={() => {
+                    // Ensure audio is ready on user interaction
+                    if (webrtcRef.current) {
+                      webrtcRef.current.ensureMobileAudioReady();
+                    }
+                    answerCall();
+                  }}
                   variant="success"
                   size="large"
                   fullWidth
@@ -722,9 +744,8 @@ const CallInterface: React.FC = () => {
           )}
         </div>
 
-        {/* Audio Elements */}
+        {/* Audio Elements - Only local audio needed, remote audio handled by WebRTC service */}
         <audio ref={localAudioRef} muted />
-        <audio ref={remoteAudioRef} autoPlay />
       </div>
     </div>
   );

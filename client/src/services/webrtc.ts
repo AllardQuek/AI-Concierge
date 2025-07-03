@@ -88,6 +88,11 @@ export class WebRTCService {
       if (iceState === 'failed') {
         console.log('🔴 ICE connection failed - usually indicates NAT/firewall issues');
         console.log('💡 Consider adding TURN servers for better connectivity');
+        // Attempt ICE restart if available
+        if (this.peerConnection && this.peerConnection.restartIce) {
+          console.log('🔄 Attempting ICE restart...');
+          this.peerConnection.restartIce();
+        }
       } else if (iceState === 'disconnected') {
         console.log('🟡 ICE connection disconnected - connection may recover or fail');
       } else if (iceState === 'connected' || iceState === 'completed') {
@@ -364,9 +369,7 @@ export class WebRTCService {
 
     this.remoteStream = null;
     
-    // Reinitialize for next call with a fresh state
-    this.initializePeerConnection();
-    console.log('WebRTC: Cleanup complete, fresh peer connection ready');
+    console.log('WebRTC: Cleanup complete');
   }
 
   // Get connection state
@@ -529,6 +532,10 @@ export class WebRTCService {
       console.log('  - ICE Gathering State:', this.peerConnection.iceGatheringState);
       console.log('  - Local Stream:', this.localStream ? `${this.localStream.getTracks().length} tracks` : 'None');
       console.log('  - Remote Stream:', this.remoteStream ? `${this.remoteStream.getTracks().length} tracks` : 'None');
+      console.log('  - Audio Context State:', this.audioContext?.state || 'None');
+      console.log('  - Remote Audio Element:', this.remoteAudioElement ? 
+        `paused: ${this.remoteAudioElement.paused}, muted: ${this.remoteAudioElement.muted}, volume: ${this.remoteAudioElement.volume}` : 'None');
+      console.log('  - User Interaction Occurred:', this.userInteractionOccurred);
     } else {
       console.log('🔍 WebRTC Debug State: No peer connection');
     }
