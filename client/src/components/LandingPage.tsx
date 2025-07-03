@@ -25,9 +25,25 @@ const LandingPage: React.FC = () => {
   const localAudioRef = useRef<HTMLAudioElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
 
-  // Handle phone number input
+  // Handle phone number input with filtering
   const handlePhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
+    let value = e.target.value;
+    
+    // Allow only digits, spaces, dashes, parentheses, and + at the beginning
+    value = value.replace(/[^\d\s\-\(\)\+]/g, '');
+    
+    // Ensure + can only be at the beginning
+    if (value.includes('+')) {
+      const plusIndex = value.indexOf('+');
+      if (plusIndex > 0) {
+        // Remove + if it's not at the beginning
+        value = value.replace(/\+/g, '');
+      } else {
+        // Keep only the first + and remove any others
+        value = '+' + value.substring(1).replace(/\+/g, '');
+      }
+    }
+    
     setFriendNumber(value);
   };
 
@@ -38,58 +54,41 @@ const LandingPage: React.FC = () => {
     }
   };
 
-  // Normalize and format phone number for consistent storage and display
+  // Normalize and format Singapore phone numbers for consistent storage and display
   const normalizePhoneNumber = (phoneNumber: string): string => {
-    // Remove all spaces, dashes, parentheses, and other formatting
+    // Remove all spaces, dashes, parentheses, and other formatting characters
     const digitsOnly = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
     
-    // Add back the + sign if it was there
-    const hasPlus = phoneNumber.trim().startsWith('+');
-    const normalized = hasPlus ? `+${digitsOnly}` : digitsOnly;
+    // Handle 8-digit Singapore mobile numbers (without country code)
+    // Singapore mobile numbers start with 8 or 9 and have 8 digits total
+    if (digitsOnly.length === 8 && (digitsOnly.startsWith('8') || digitsOnly.startsWith('9'))) {
+      return `+65 ${digitsOnly.substring(0, 4)} ${digitsOnly.substring(4)}`;
+    }
     
-    // Format based on country code patterns
-    if (normalized.startsWith('+') && normalized.length >= 8) {
-      const countryAndNumber = normalized.substring(1); // Remove +
+    // Handle 10-digit numbers with 65 prefix (Singapore numbers with country code but no +)
+    if (digitsOnly.length === 10 && digitsOnly.startsWith('65')) {
+      const phoneNumber = digitsOnly.substring(2); // Remove 65 prefix
+      if (phoneNumber.length === 8 && (phoneNumber.startsWith('8') || phoneNumber.startsWith('9'))) {
+        return `+65 ${phoneNumber.substring(0, 4)} ${phoneNumber.substring(4)}`;
+      }
+    }
+    
+    // Handle numbers that already have + prefix
+    if (phoneNumber.trim().startsWith('+')) {
+      const countryAndNumber = digitsOnly; // digitsOnly already removed the +
       
-      // Singapore (+65): Format as +65 XXXX XXXX (two groups of 4 digits)
+      // Singapore (+65): Format as +65 XXXX XXXX
       if (countryAndNumber.startsWith('65') && countryAndNumber.length === 10) {
         const phoneNumber = countryAndNumber.substring(2); // Remove 65
-        if (phoneNumber.length === 8) {
+        if (phoneNumber.length === 8 && (phoneNumber.startsWith('8') || phoneNumber.startsWith('9'))) {
           return `+65 ${phoneNumber.substring(0, 4)} ${phoneNumber.substring(4)}`;
-        }
-      }
-      
-      // US/Canada (+1): Format as +1 XXX XXX XXXX
-      else if (countryAndNumber.startsWith('1') && countryAndNumber.length === 11) {
-        const phoneNumber = countryAndNumber.substring(1); // Remove 1
-        if (phoneNumber.length === 10) {
-          return `+1 ${phoneNumber.substring(0, 3)} ${phoneNumber.substring(3, 6)} ${phoneNumber.substring(6)}`;
-        }
-      }
-      
-      // UK (+44): Format as +44 XXXX XXX XXX
-      else if (countryAndNumber.startsWith('44') && countryAndNumber.length >= 10) {
-        const phoneNumber = countryAndNumber.substring(2); // Remove 44
-        if (phoneNumber.length >= 8) {
-          return `+44 ${phoneNumber.substring(0, 4)} ${phoneNumber.substring(4, 7)} ${phoneNumber.substring(7)}`;
-        }
-      }
-      
-      // Default international format: +CC XXX XXXX (for other countries)
-      else if (countryAndNumber.length >= 7) {
-        const countryCode = countryAndNumber.substring(0, 2);
-        const remainingDigits = countryAndNumber.substring(2);
-        
-        if (remainingDigits.length >= 6) {
-          const firstPart = remainingDigits.substring(0, 3);
-          const secondPart = remainingDigits.substring(3);
-          return `+${countryCode} ${firstPart} ${secondPart}`;
         }
       }
     }
     
-    // Fallback: return as-is if we can't parse it properly
-    return normalized;
+    // If we can't parse it as a valid Singapore number, return the cleaned digits
+    // This allows for error handling in the validation function
+    return digitsOnly;
   };
 
   // Generate a unique international phone number for this user session
@@ -401,6 +400,9 @@ const LandingPage: React.FC = () => {
         throw new Error('No offer received - the call may have expired or been cancelled');
       }
       
+      // Prepare iOS Safari for optimal audio handling
+      await webrtcRef.current.prepareForIOSCall();
+      
       console.log('🎤 Getting user media...');
       // Get user media and create answer
       await webrtcRef.current.getUserMedia();
@@ -449,7 +451,10 @@ const LandingPage: React.FC = () => {
     try {
       // Normalize the phone number before calling
       const normalizedNumber = normalizePhoneNumber(friendNumber.trim());
-      console.log(`Calling normalized number: ${normalizedNumber} (original: ${friendNumber.trim()})`);
+      console.log(`📞 Phone Number Normalization:`);
+      console.log(`   Original input: "${friendNumber.trim()}"`);
+      console.log(`   Normalized to: "${normalizedNumber}"`);
+      console.log(`   Validation: ${phoneValidation.isValid ? '✅ Valid' : '❌ Invalid'} - ${phoneValidation.message}`);
       
       setCurrentCallPartner(normalizedNumber);
       setCallState('outgoing');
@@ -473,6 +478,9 @@ const LandingPage: React.FC = () => {
       if (!webrtcRef.current || !socketRef.current) throw new Error('Services not initialized');
       
       console.log(`🔄 Starting call to ${targetNumber} from ${myNumber}`);
+      
+      // Prepare iOS Safari for optimal audio handling
+      await webrtcRef.current.prepareForIOSCall();
       
       // Set a timeout for the call connection
       callTimeoutRef.current = window.setTimeout(() => {
@@ -645,6 +653,37 @@ const LandingPage: React.FC = () => {
     }
   };
 
+  // Simple phone number validation - just check if we have enough digits
+  const validatePhoneNumber = (phoneNumber: string): { isValid: boolean, message: string } => {
+    if (!phoneNumber.trim()) {
+      return { isValid: false, message: '' };
+    }
+
+    const digitsOnly = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
+    const normalized = normalizePhoneNumber(phoneNumber.trim());
+    
+    // Just check if we have a reasonable number of digits (7-10)
+    if (digitsOnly.length >= 7 && digitsOnly.length <= 10) {
+      return { 
+        isValid: true, 
+        message: `Will call: ${normalized}` 
+      };
+    } else if (digitsOnly.length < 7) {
+      return { 
+        isValid: false, 
+        message: 'Too short - need at least 7 digits' 
+      };
+    } else {
+      return { 
+        isValid: false, 
+        message: 'Too long - max 10 digits' 
+      };
+    }
+  };
+
+  // Get the current phone number validation status
+  const phoneValidation = validatePhoneNumber(friendNumber);
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="max-w-md mx-auto">
@@ -666,22 +705,33 @@ const LandingPage: React.FC = () => {
             </h2>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Enter phone number:
-                </label>
                 <input
                   type="text"
                   value={friendNumber}
                   onChange={handlePhoneNumberChange}
                   onKeyPress={handlePhoneNumberKeyPress}
                   placeholder="Enter phone number"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-lg font-mono tracking-wider"
-                  maxLength={20}
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-lg font-mono tracking-wider ${
+                    friendNumber.trim() && !phoneValidation.isValid 
+                      ? 'border-red-300 bg-red-50' 
+                      : friendNumber.trim() && phoneValidation.isValid 
+                        ? 'border-green-300 bg-green-50' 
+                        : 'border-gray-300'
+                  }`}
+                  maxLength={15}
                 />
+                {/* Phone number preview */}
+                {friendNumber.trim() && (
+                  <p className={`text-xs mt-2 text-center ${
+                    phoneValidation.isValid ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {phoneValidation.message}
+                  </p>
+                )}
               </div>
               <Button
                 onClick={handleCallFriend}
-                disabled={!friendNumber.trim()}
+                disabled={!friendNumber.trim() || !phoneValidation.isValid}
                 variant="primary"
                 size="large"
                 fullWidth

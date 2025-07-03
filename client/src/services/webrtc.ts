@@ -57,6 +57,32 @@ export class WebRTCService {
       this.remoteStream = remoteStream;
       console.log('WebRTC: Remote stream tracks:', remoteStream.getTracks().length);
       
+      // Enhanced iOS Safari audio track handling
+      if (event.track.kind === 'audio') {
+        console.log('WebRTC: Audio track received - readyState:', event.track.readyState, 'enabled:', event.track.enabled);
+        
+        // iOS Safari specific audio track setup
+        if (this.isIOSSafari()) {
+          console.log('WebRTC: Applying iOS Safari remote audio track fixes');
+          
+          // Ensure the track is enabled
+          event.track.enabled = true;
+          
+          // Add iOS-specific event listeners for debugging
+          event.track.addEventListener('ended', () => {
+            console.log('WebRTC: Remote audio track ended on iOS Safari');
+          });
+          
+          event.track.addEventListener('mute', () => {
+            console.log('WebRTC: Remote audio track muted on iOS Safari');
+          });
+          
+          event.track.addEventListener('unmute', () => {
+            console.log('WebRTC: Remote audio track unmuted on iOS Safari');
+          });
+        }
+      }
+      
       // Create and configure audio element for mobile compatibility
       this.setupRemoteAudio(remoteStream);
       
@@ -114,6 +140,40 @@ export class WebRTCService {
       
       this.localStream = stream;
       console.log('WebRTC: Got local stream with tracks:', stream.getTracks().length);
+      
+      // Force-enable audio tracks for iOS Safari (critical fix)
+      stream.getAudioTracks().forEach(track => {
+        console.log('WebRTC: Audio track state before enabling:', track.readyState, track.enabled);
+        track.enabled = true;
+        
+        // iOS Safari-specific audio track handling
+        if (this.isIOSSafari()) {
+          console.log('WebRTC: Applying iOS Safari audio track fixes');
+          
+          // Force track constraints for iOS
+          track.applyConstraints({
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            sampleRate: 48000
+          }).catch(err => console.warn('WebRTC: iOS constraint application failed:', err));
+          
+          // Add iOS-specific event listeners
+          track.addEventListener('ended', () => {
+            console.log('WebRTC: iOS audio track ended unexpectedly');
+          });
+          
+          track.addEventListener('mute', () => {
+            console.log('WebRTC: iOS audio track muted');
+          });
+          
+          track.addEventListener('unmute', () => {
+            console.log('WebRTC: iOS audio track unmuted');
+          });
+        }
+        
+        console.log('WebRTC: Audio track state after enabling:', track.readyState, track.enabled);
+      });
       
       // Add tracks to peer connection
       if (this.peerConnection) {
@@ -410,21 +470,44 @@ export class WebRTCService {
 
   // Setup remote audio element for mobile compatibility
   private setupRemoteAudio(stream: MediaStream) {
+    console.log('WebRTC: Setting up remote audio for mobile compatibility');
+    
     // Remove existing audio element if any
     if (this.remoteAudioElement) {
+      this.remoteAudioElement.pause();
+      this.remoteAudioElement.srcObject = null;
       this.remoteAudioElement.remove();
     }
 
-    // Create new audio element
+    // Create new audio element with enhanced mobile support
     this.remoteAudioElement = document.createElement('audio');
     this.remoteAudioElement.srcObject = stream;
     this.remoteAudioElement.autoplay = true;
-    (this.remoteAudioElement as any).playsInline = true; // Essential for iOS
+    this.remoteAudioElement.muted = false;
+    this.remoteAudioElement.volume = 1.0;
+    
+    // Essential iOS Safari properties
+    (this.remoteAudioElement as any).playsInline = true;
+    (this.remoteAudioElement as any)['webkit-playsinline'] = true;
     this.remoteAudioElement.controls = false;
     this.remoteAudioElement.style.display = 'none';
     
+    // Set audio attributes for better iOS compatibility
+    this.remoteAudioElement.setAttribute('playsinline', 'true');
+    this.remoteAudioElement.setAttribute('webkit-playsinline', 'true');
+    this.remoteAudioElement.setAttribute('x-webkit-airplay', 'allow');
+    
     // Add to DOM for mobile compatibility
     document.body.appendChild(this.remoteAudioElement);
+
+    // Add event listeners for debugging
+    this.remoteAudioElement.addEventListener('loadstart', () => console.log('WebRTC: Remote audio loadstart'));
+    this.remoteAudioElement.addEventListener('loadeddata', () => console.log('WebRTC: Remote audio loadeddata'));
+    this.remoteAudioElement.addEventListener('canplay', () => console.log('WebRTC: Remote audio canplay'));
+    this.remoteAudioElement.addEventListener('play', () => console.log('WebRTC: Remote audio play'));
+    this.remoteAudioElement.addEventListener('playing', () => console.log('WebRTC: Remote audio playing'));
+    this.remoteAudioElement.addEventListener('pause', () => console.log('WebRTC: Remote audio pause'));
+    this.remoteAudioElement.addEventListener('error', (e) => console.error('WebRTC: Remote audio error:', e));
 
     // Handle audio play promise for mobile
     this.playRemoteAudio();
@@ -434,37 +517,72 @@ export class WebRTCService {
   private async playRemoteAudio() {
     if (!this.remoteAudioElement) return;
 
+    console.log('WebRTC: Attempting to play remote audio...');
+    console.log('WebRTC: User interaction occurred:', this.userInteractionOccurred);
+    console.log('WebRTC: Audio context state:', this.audioContext?.state || 'None');
+
     try {
-      // Try to play immediately if user has interacted
-      if (this.userInteractionOccurred) {
-        await this.remoteAudioElement.play();
-        console.log('WebRTC: Remote audio started playing');
-        return;
+      // Always try to resume audio context first (crucial for iOS)
+      if (this.audioContext && this.audioContext.state === 'suspended') {
+        console.log('WebRTC: Resuming suspended audio context...');
+        await this.audioContext.resume();
       }
 
-      // Try autoplay first
-      await this.remoteAudioElement.play();
-      console.log('WebRTC: Remote audio started playing (autoplay)');
-    } catch (error) {
-      console.warn('WebRTC: Autoplay blocked, waiting for user interaction:', error);
+      // Force play the audio element
+      console.log('WebRTC: Attempting to play audio element...');
+      const playPromise = this.remoteAudioElement.play();
       
-      // If autoplay is blocked, wait for user interaction
-      const playOnInteraction = async () => {
-        try {
-          if (this.remoteAudioElement) {
-            await this.remoteAudioElement.play();
-            console.log('WebRTC: Remote audio started after user interaction');
-          }
-        } catch (playError) {
-          console.error('WebRTC: Failed to play audio after interaction:', playError);
-        }
-        document.removeEventListener('touchstart', playOnInteraction);
-        document.removeEventListener('click', playOnInteraction);
-      };
-
-      document.addEventListener('touchstart', playOnInteraction, { once: true });
-      document.addEventListener('click', playOnInteraction, { once: true });
+      if (playPromise !== undefined) {
+        await playPromise;
+        console.log('WebRTC: Remote audio started playing successfully');
+        return;
+      }
+      
+    } catch (error) {
+      console.warn('WebRTC: Initial audio play failed:', error);
+      
+      // If autoplay is blocked, set up listeners for user interaction
+      if (error instanceof Error && (error.name === 'NotAllowedError' || error.name === 'AbortError')) {
+        console.log('WebRTC: Setting up user interaction listeners for audio playback');
+        this.setupUserInteractionAudioPlayback();
+      }
     }
+  }
+
+  // Setup user interaction handlers for audio playback (iOS Safari fix)
+  private setupUserInteractionAudioPlayback() {
+    const playOnInteraction = async () => {
+      try {
+        console.log('WebRTC: User interaction detected, attempting audio playback...');
+        
+        // Resume audio context if needed
+        if (this.audioContext && this.audioContext.state === 'suspended') {
+          await this.audioContext.resume();
+          console.log('WebRTC: Audio context resumed on user interaction');
+        }
+        
+        // Try to play the audio
+        if (this.remoteAudioElement && this.remoteAudioElement.paused) {
+          await this.remoteAudioElement.play();
+          console.log('WebRTC: Remote audio started after user interaction');
+        }
+        
+        // Remove listeners after successful play
+        document.removeEventListener('touchstart', playOnInteraction);
+        document.removeEventListener('touchend', playOnInteraction);
+        document.removeEventListener('click', playOnInteraction);
+        document.removeEventListener('keydown', playOnInteraction);
+        
+      } catch (playError) {
+        console.error('WebRTC: Failed to play audio after interaction:', playError);
+      }
+    };
+
+    // Add multiple event listeners to catch any user interaction
+    document.addEventListener('touchstart', playOnInteraction, { once: true, passive: true });
+    document.addEventListener('touchend', playOnInteraction, { once: true, passive: true });
+    document.addEventListener('click', playOnInteraction, { once: true, passive: true });
+    document.addEventListener('keydown', playOnInteraction, { once: true, passive: true });
   }
 
   // Force audio context resume for mobile (call this on user interaction)
@@ -494,18 +612,62 @@ export class WebRTCService {
     }
   }
 
+  // iOS Safari-specific call preparation (call before making/answering calls)
+  async prepareForIOSCall(): Promise<void> {
+    if (!this.isIOSSafari()) return;
+    
+    console.log('WebRTC: Preparing iOS Safari for call...');
+    
+    try {
+      // Ensure audio context is created and ready
+      if (!this.audioContext) {
+        this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      }
+      
+      // Try to resume audio context immediately if possible
+      if (this.audioContext.state === 'suspended') {
+        await this.audioContext.resume();
+        console.log('WebRTC: iOS audio context pre-resumed');
+      }
+      
+      // Pre-create a silent audio element to "unlock" audio on iOS
+      const silentAudio = document.createElement('audio');
+      silentAudio.src = 'data:audio/mp3;base64,SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjMyLjEwNAAAAAAAAAAAAAAA//OEAAAAAAAAAAAAAAAAAAAAAAAASW5mbwAAAA8AAAAEAAABIADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA4ODg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4OD//////////////////8AAAAATGF2YzU4LjU1AAAAAAAAAAAAAAAAJAAAAAAAAAAAASDb3AgAAAAAAPf/w4QAAAAAAAAAAAAAAAAAAAAAAAAASVREAAAAAAAfxJeaAAABkklEQVR4nGNgGAWjYBSMglEwCkbBKBgFo2AUjIJRMApGwSgYBaNgFIyC/w0AcJhjAAAQAAAAA//8Q==';
+      silentAudio.volume = 0.01;
+      silentAudio.muted = true;
+      
+      try {
+        await silentAudio.play();
+        console.log('WebRTC: iOS silent audio played successfully');
+      } catch (error) {
+        console.warn('WebRTC: iOS silent audio play failed:', error);
+      }
+      
+      // Clean up silent audio
+      silentAudio.remove();
+      
+    } catch (error) {
+      console.warn('WebRTC: iOS call preparation failed:', error);
+    }
+  }
+
+  // Check if running on iOS Safari
+  private isIOSSafari(): boolean {
+    const userAgent = navigator.userAgent;
+    const isIOS = /iPad|iPhone|iPod/.test(userAgent);
+    const isSafari = /Safari/.test(userAgent) && !/Chrome/.test(userAgent);
+    return isIOS && isSafari;
+  }
+
   // Get mobile-optimized audio constraints
   private getMobileAudioConstraints(): MediaTrackConstraints {
-    const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
-    if (isMobile) {
+    if (this.isIOSSafari()) {
+      // iOS Safari specific constraints
       return {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
-        // Mobile-specific optimizations
         sampleRate: 48000,
-        sampleSize: 16,
         channelCount: 1, // Mono for mobile
       };
     }

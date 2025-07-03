@@ -214,6 +214,9 @@ const CallInterface: React.FC = () => {
       // Setup WebRTC event listeners first
       setupWebRTCListeners();
       
+      // Prepare iOS Safari for optimal audio handling
+      await webrtcRef.current.prepareForIOSCall();
+      
       // Set a timeout for the call connection
       callTimeoutRef.current = window.setTimeout(() => {
         console.log('⏰ Call connection timeout');
@@ -433,6 +436,9 @@ const CallInterface: React.FC = () => {
       
       // Debug current WebRTC state
       webrtcRef.current.debugState();
+      
+      // Prepare iOS Safari for optimal audio handling
+      await webrtcRef.current.prepareForIOSCall();
       
       // Get the stored offer
       const offer = (window as any).incomingOffer;
