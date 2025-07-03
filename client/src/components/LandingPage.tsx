@@ -561,14 +561,8 @@ const LandingPage: React.FC = () => {
       webrtcRef.current = null;
     }
     
-    // Clean up socket event listeners
-    if (socketRef.current) {
-      socketRef.current.off('user-calling');
-      socketRef.current.off('call-answered');
-      socketRef.current.off('call-declined');
-      socketRef.current.off('call-ended');
-      socketRef.current.off('ice-candidate');
-    }
+    // DON'T remove socket listeners here - they're needed for future calls
+    // Socket cleanup should only happen on page unload/component unmount
     
     // Clean up any stored offers
     if ((window as any).incomingOffer) {
