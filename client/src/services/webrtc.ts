@@ -9,13 +9,18 @@ export class WebRTCService {
   private onConnectionStateChangeCallback?: (state: string) => void;
   private userInteractionOccurred: boolean = false;
 
-  // ICE servers configuration for NAT traversal
+  // ICE servers configuration for NAT traversal (enhanced for mobile)
   private iceServers = [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
     { urls: 'stun:stun2.l.google.com:19302' },
-    // TURN servers can be added later if needed for users behind restrictive NATs
-    // Most iPhone-to-iPhone calls work fine with just STUN servers
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    // Additional STUN servers for better mobile connectivity
+    { urls: 'stun:stun.stunprotocol.org:3478' },
+    { urls: 'stun:stun.ekiga.net' },
+    // TURN servers can be added here for users behind restrictive NATs
+    // Most mobile-to-mobile calls work with STUN, but TURN helps with corporate networks
   ];
 
   constructor() {
@@ -345,7 +350,10 @@ export class WebRTCService {
     if (this.peerConnection) {
       this.peerConnection.onicecandidate = (event) => {
         if (event.candidate) {
+          console.log('🧊 ICE candidate generated:', event.candidate.type, event.candidate.candidate);
           callback(event.candidate);
+        } else {
+          console.log('🧊 ICE candidate gathering complete');
         }
       };
     }

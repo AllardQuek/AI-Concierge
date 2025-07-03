@@ -336,6 +336,7 @@ const LandingPage: React.FC = () => {
     // Handle ICE candidates
     webrtcRef.current.onIceCandidate((candidate: RTCIceCandidate) => {
       if (socketRef.current && candidate) {
+        console.log('🧊 Sending ICE candidate to:', currentCallPartner);
         socketRef.current.emit('ice-candidate', {
           candidate: candidate.toJSON(),
           targetUserId: currentCallPartner
@@ -373,6 +374,7 @@ const LandingPage: React.FC = () => {
 
     // Listen for remote ICE candidates
     socketRef.current.on('ice-candidate', ({ candidate }: { candidate: RTCIceCandidateInit }) => {
+      console.log('🧊 Received ICE candidate from remote peer');
       if (webrtcRef.current) {
         webrtcRef.current.addIceCandidate(candidate);
       }
@@ -454,7 +456,6 @@ const LandingPage: React.FC = () => {
       console.log(`📞 Phone Number Normalization:`);
       console.log(`   Original input: "${friendNumber.trim()}"`);
       console.log(`   Normalized to: "${normalizedNumber}"`);
-      console.log(`   Validation: ${phoneValidation.isValid ? '✅ Valid' : '❌ Invalid'} - ${phoneValidation.message}`);
       
       setCurrentCallPartner(normalizedNumber);
       setCallState('outgoing');

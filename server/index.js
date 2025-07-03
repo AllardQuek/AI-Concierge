@@ -197,6 +197,26 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Handle ICE candidate exchange (CRITICAL for WebRTC connections)
+  socket.on('ice-candidate', ({ candidate, targetUserId }) => {
+    try {
+      console.log(`ICE candidate from ${socket.id} to ${targetUserId}`);
+      
+      const targetSocketId = peerCodeMap.get(targetUserId);
+      
+      if (targetSocketId) {
+        // Forward the ICE candidate to the target user
+        io.to(targetSocketId).emit('ice-candidate', { candidate });
+        console.log(`ICE candidate forwarded to ${targetUserId}`);
+      } else {
+        console.log(`Target user ${targetUserId} not found for ICE candidate`);
+      }
+      
+    } catch (error) {
+      console.error('Error handling ice-candidate:', error);
+    }
+  });
+
   // Handle user disconnect
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
