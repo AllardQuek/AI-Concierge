@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { WebRTCService } from '../services/webrtc';
 import { SocketService } from '../services/socket';
 import { Button, ConnectionStatus, ErrorMessage } from './shared';
+import { NetworkDiagnosticsPanel } from './NetworkDiagnosticsPanel';
 
 type CallState = 'connecting' | 'ringing' | 'connected' | 'disconnected' | 'waiting' | 'incoming';
 
@@ -19,6 +20,7 @@ const CallInterface: React.FC = () => {
   const [callDuration, setCallDuration] = useState(0); // Call duration in seconds
   const [callStartTime, setCallStartTime] = useState<number | null>(null);
   const [webrtcListenersSetup, setWebrtcListenersSetup] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   
   const webrtcRef = useRef<WebRTCService | null>(null);
   const socketRef = useRef<SocketService | null>(null);
@@ -259,6 +261,12 @@ const CallInterface: React.FC = () => {
       console.log('📞 Call was answered - processing answer...');
       console.log('📞 Current call state before processing answer:', callState);
       
+      // Prevent duplicate processing
+      if (callState === 'connected') {
+        console.log('📞 Already connected, ignoring duplicate call-answered event');
+        return;
+      }
+      
       if (webrtcRef.current) {
         try {
           await webrtcRef.current.setRemoteAnswer(answer);
@@ -308,26 +316,7 @@ const CallInterface: React.FC = () => {
       }
     });
 
-    socketRef.current.on('call-answered', async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
-      console.log('📞 Call was answered - processing answer...');
-      console.log('📞 Current call state before processing answer:', callState);
-      
-      if (webrtcRef.current) {
-        try {
-          await webrtcRef.current.setRemoteAnswer(answer);
-          console.log('📞 Remote answer set successfully, updating UI to connected state');
-          setCallState('connected');
-          setError(''); // Clear any errors
-          clearTimeout(callTimeoutRef.current!); // Clear connection timeout
-          
-          // Debug WebRTC state after setting answer
-          webrtcRef.current.debugState();
-        } catch (error) {
-          console.error('📞 Error setting remote answer:', error);
-          setError('Failed to establish connection');
-        }
-      }
-    });
+    // Note: call-answered handler is set up in setupCallResponseListeners to avoid duplicates
 
     socketRef.current.on('call-declined', () => {
       console.log('📞 Call was declined');
@@ -343,7 +332,8 @@ const CallInterface: React.FC = () => {
       clearTimeout(callTimeoutRef.current!); // Clear connection timeout
     });
 
-    setupWebRTCListeners();
+    // Set up call response listeners (including call-answered) to avoid duplicates
+    setupCallResponseListeners();
   };
 
   const setupWebRTCListeners = () => {
@@ -396,6 +386,11 @@ const CallInterface: React.FC = () => {
           console.log('🔗 WebRTC connection lost');
           setCallState('disconnected');
           setError('Connection lost');
+          // Automatically show diagnostics panel on connection failure for debugging
+          if (state === 'failed') {
+            console.log('🔧 Auto-showing diagnostics due to connection failure');
+            setShowDiagnostics(true);
+          }
         }
       } else if (state === 'connecting') {
         // Only set to connecting if we're not already connected or in the process of connecting
@@ -571,13 +566,17 @@ const CallInterface: React.FC = () => {
       webrtcRef.current = null;
     }
     
-    // Clean up socket connection and remove event listeners
+    // Clean up socket connection and remove ALL event listeners
     if (socketRef.current) {
+      // Remove all possible event listeners to prevent duplicates
       socketRef.current.off('user-calling');
       socketRef.current.off('call-answered');
       socketRef.current.off('call-declined');
       socketRef.current.off('call-ended');
       socketRef.current.off('ice-candidate');
+      socketRef.current.off('offer');
+      socketRef.current.off('answer');
+      socketRef.current.off('error');
       socketRef.current.disconnect();
       socketRef.current = null;
     }
@@ -627,6 +626,37 @@ const CallInterface: React.FC = () => {
           {error && (
             <div className="mb-6">
               <ErrorMessage message={error} />
+              {/* Connection troubleshooting options for network-related errors */}
+              {(error.includes('Connection') || error.includes('timeout') || error.includes('failed')) && (
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    onClick={() => {
+                      // Reset diagnostics and retry
+                      if (webrtcRef.current) {
+                        webrtcRef.current.resetDiagnostics();
+                      }
+                      setError('');
+                      // If we were trying to call someone, retry the call
+                      if (friendNumber && callState === 'disconnected') {
+                        initiateCall(friendNumber, myNumber);
+                      }
+                    }}
+                    variant="primary"
+                    size="small"
+                    className="flex items-center justify-center gap-1"
+                  >
+                    🔄 Retry
+                  </Button>
+                  <Button
+                    onClick={() => setShowDiagnostics(true)}
+                    variant="secondary"
+                    size="small"
+                    className="flex items-center justify-center gap-1"
+                  >
+                    🔧 Diagnose
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
@@ -749,6 +779,26 @@ const CallInterface: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Network Diagnostics Button - Show during calls or when there are connection issues */}
+        {(callState === 'connected' || callState === 'connecting' || callState === 'ringing' || error) && (
+          <div className="text-center mt-4">
+            <Button
+              onClick={() => setShowDiagnostics(!showDiagnostics)}
+              variant="secondary"
+              size="small"
+              className="flex items-center justify-center gap-2"
+            >
+              🔧 {showDiagnostics ? 'Hide' : 'Show'} Network Diagnostics
+            </Button>
+          </div>
+        )}
+
+        {/* Network Diagnostics Panel */}
+        <NetworkDiagnosticsPanel 
+          isVisible={showDiagnostics}
+          onClose={() => setShowDiagnostics(false)}
+        />
 
         {/* Audio Elements - Only local audio needed, remote audio handled by WebRTC service */}
         <audio ref={localAudioRef} muted />

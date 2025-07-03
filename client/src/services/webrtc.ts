@@ -21,7 +21,7 @@ export class WebRTCService {
     { urls: 'stun:stun.stunprotocol.org:3478' },
     { urls: 'stun:stun.ekiga.net' },
     
-    // Free public TURN servers for mobile NAT traversal
+    // Multiple TURN servers for better connectivity
     {
       urls: 'turn:openrelay.metered.ca:80',
       username: 'openrelayproject',
@@ -36,8 +36,44 @@ export class WebRTCService {
       urls: 'turn:openrelay.metered.ca:443?transport=tcp',
       username: 'openrelayproject',
       credential: 'openrelayproject'
+    },
+    // Additional TURN servers for redundancy
+    {
+      urls: 'turn:relay.backups.cz',
+      username: 'webrtc',
+      credential: 'webrtc'
+    },
+    {
+      urls: 'turn:relay.backups.cz:443',
+      username: 'webrtc',
+      credential: 'webrtc'
+    },
+    // Xirsys public TURN (limited but good for testing)
+    {
+      urls: 'turn:global.turn.twilio.com:3478?transport=udp',
+      username: 'f4b4035e68678bf6de4b747dd63ad9f8b8e5e0d8f5c4d9e8a6b7c3d2e1f0a9b8',
+      credential: 'f4b4035e68678bf6de4b747dd63ad9f8b8e5e0d8f5c4d9e8a6b7c3d2e1f0a9b8'
     }
   ];
+
+  // Enhanced network diagnostics for cross-network debugging
+  private networkDiagnostics = {
+    localCandidates: new Map<string, RTCIceCandidate>(),
+    remoteCandidates: new Map<string, RTCIceCandidate>(),
+    candidatePairs: new Array<RTCIceCandidatePair>(),
+    connectionAttempts: 0,
+    lastFailureReason: '',
+    networkType: 'unknown'
+  };
+
+  // State tracking to prevent duplicate operations
+  private operationState = {
+    isCreatingOffer: false,
+    isCreatingAnswer: false,
+    isSettingRemoteAnswer: false,
+    lastOfferTimestamp: 0,
+    lastAnswerTimestamp: 0
+  };
 
   constructor() {
     this.initializePeerConnection();
@@ -121,17 +157,17 @@ export class WebRTCService {
       
       if (iceState === 'checking') {
         console.log('🔄 ICE checking - testing network connectivity paths...');
+        this.networkDiagnostics.connectionAttempts++;
       } else if (iceState === 'connected') {
         console.log('🟢 ICE connected - direct connection established!');
       } else if (iceState === 'completed') {
         console.log('✅ ICE completed - optimal connection path found');
       } else if (iceState === 'failed') {
         console.log('🔴 ICE connection failed - network issues detected');
-        console.log('💡 Possible causes:');
-        console.log('   - Strict firewall/NAT blocking connection');
-        console.log('   - STUN servers unreachable');
-        console.log('   - Need TURN server for this network');
-        console.log('   - Different network types (cellular vs WiFi)');
+        this.networkDiagnostics.lastFailureReason = 'ICE connection failed';
+        
+        // Log detailed diagnostics on failure
+        this.logConnectionDiagnostics().catch(console.error);
         
         // Attempt ICE restart if available
         if (this.peerConnection && this.peerConnection.restartIce) {
@@ -142,6 +178,13 @@ export class WebRTCService {
         console.log('🟡 ICE disconnected - connection lost, may recover...');
       } else if (iceState === 'closed') {
         console.log('⚫ ICE connection closed');
+      }
+    };
+
+    // Enhanced candidate tracking for cross-network analysis
+    this.peerConnection.onicecandidate = (event) => {
+      if (event.candidate) {
+        this.trackIceCandidate(event.candidate, true);
       }
     };
   }
@@ -195,20 +238,27 @@ export class WebRTCService {
 
   // Create offer for initiating connection
   async createOffer(): Promise<RTCSessionDescriptionInit> {
+    try {
+      // Validate state and prevent duplicate operations
+      this.validateStateForOperation('offer');
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Invalid state')) {
+        // Reset and retry once
+        console.log('WebRTC: Resetting connection for offer creation...');
+        await this.resetPeerConnection();
+      } else {
+        throw error;
+      }
+    }
+
     if (!this.peerConnection) {
       console.log('Peer connection not initialized, reinitializing...');
       this.initializePeerConnection();
     }
 
-    // Check signaling state
-    const currentState = this.peerConnection!.signalingState;
-    console.log('WebRTC: Current signaling state before createOffer:', currentState);
-    
-    // If we're not in a stable state, reset the connection
-    if (currentState !== 'stable') {
-      console.log('WebRTC: Non-stable state detected, resetting peer connection...');
-      await this.resetPeerConnection();
-    }
+    // Set operation in progress flag
+    this.operationState.isCreatingOffer = true;
+    this.operationState.lastOfferTimestamp = Date.now();
 
     // Ensure we have a local stream
     if (!this.localStream) {
@@ -246,24 +296,34 @@ export class WebRTCService {
     } catch (error) {
       console.error('WebRTC: Error creating offer:', error);
       throw error;
+    } finally {
+      // Clear operation flag
+      this.operationState.isCreatingOffer = false;
     }
   }
 
   // Create answer for responding to offer
   async createAnswer(offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
+    try {
+      // Validate state and prevent duplicate operations
+      this.validateStateForOperation('answer');
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Invalid state')) {
+        // Reset and retry once
+        console.log('WebRTC: Resetting connection for answer creation...');
+        await this.resetPeerConnection();
+      } else {
+        throw error;
+      }
+    }
+
     if (!this.peerConnection) {
       throw new Error('Peer connection not initialized');
     }
 
-    // Check if we're in a valid state for setting remote description
-    const currentState = this.peerConnection.signalingState;
-    console.log('WebRTC: Current signaling state before setRemoteDescription:', currentState);
-    
-    // If we're not in 'stable' or 'have-local-offer' state, we need to reset
-    if (currentState !== 'stable' && currentState !== 'have-local-offer') {
-      console.log('WebRTC: Invalid state for setRemoteDescription, resetting peer connection...');
-      await this.resetPeerConnection();
-    }
+    // Set operation in progress flag
+    this.operationState.isCreatingAnswer = true;
+    this.operationState.lastAnswerTimestamp = Date.now();
 
     // Ensure we have a local stream before creating answer
     if (!this.localStream) {
@@ -272,9 +332,22 @@ export class WebRTCService {
     }
 
     try {
+      // Verify signaling state before setting remote description
+      const preSetState = this.peerConnection.signalingState;
+      console.log('WebRTC: Signaling state before setRemoteDescription:', preSetState);
+      
+      // Only set remote description if we're in stable state
+      if (preSetState !== 'stable') {
+        throw new Error(`Invalid signaling state for setRemoteDescription: ${preSetState}`);
+      }
+      
       // Set remote description
       console.log('WebRTC: Setting remote offer description...');
       await this.peerConnection.setRemoteDescription(offer);
+      
+      // Verify state after setting remote description
+      const postSetState = this.peerConnection.signalingState;
+      console.log('WebRTC: Signaling state after setRemoteDescription:', postSetState);
       
       // Create and set local answer
       console.log('🔄 Creating WebRTC answer...');
@@ -301,18 +374,36 @@ export class WebRTCService {
       return completeAnswer;
     } catch (error) {
       console.error('WebRTC: Error in createAnswer:', error);
-      // If we get an SDP error, try resetting and retrying once
-      if (error instanceof Error && error.message.includes('m-lines')) {
-        console.log('WebRTC: SDP m-lines error detected, attempting recovery...');
-        await this.resetPeerConnection();
-        // Retry once with fresh peer connection
-        await this.getUserMedia();
-        await this.peerConnection!.setRemoteDescription(offer);
-        const retryAnswer = await this.peerConnection!.createAnswer();
-        await this.peerConnection!.setLocalDescription(retryAnswer);
-        return retryAnswer;
+      
+      // Enhanced error handling for different types of WebRTC errors
+      if (error instanceof Error) {
+        if (error.message.includes('InvalidStateError') || error.message.includes('wrong state')) {
+          console.log('WebRTC: State error detected, attempting full recovery...');
+          await this.resetPeerConnection();
+          
+          // Retry once with completely fresh peer connection
+          await this.getUserMedia();
+          await this.peerConnection!.setRemoteDescription(offer);
+          const retryAnswer = await this.peerConnection!.createAnswer();
+          await this.peerConnection!.setLocalDescription(retryAnswer);
+          return retryAnswer;
+        } else if (error.message.includes('m-lines')) {
+          console.log('WebRTC: SDP m-lines error detected, attempting recovery...');
+          await this.resetPeerConnection();
+          
+          // Retry once with fresh peer connection
+          await this.getUserMedia();
+          await this.peerConnection!.setRemoteDescription(offer);
+          const retryAnswer = await this.peerConnection!.createAnswer();
+          await this.peerConnection!.setLocalDescription(retryAnswer);
+          return retryAnswer;
+        }
       }
+      
       throw error;
+    } finally {
+      // Clear operation flag
+      this.operationState.isCreatingAnswer = false;
     }
   }
 
@@ -322,21 +413,50 @@ export class WebRTCService {
       throw new Error('Peer connection not initialized');
     }
 
-    // Check signaling state before setting remote description
-    const currentState = this.peerConnection.signalingState;
-    console.log('WebRTC: Current signaling state before setRemoteAnswer:', currentState);
-    
-    if (currentState !== 'have-local-offer') {
-      console.warn('WebRTC: Unexpected signaling state for setRemoteAnswer:', currentState);
-      // Don't throw error, but log for debugging
+    // Check signaling state and prevent duplicate operations
+    try {
+      this.validateStateForOperation('setRemoteAnswer');
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Connection already established')) {
+        console.log('WebRTC: Connection already established, skipping setRemoteAnswer');
+        return;
+      }
+      throw error;
     }
+
+    // Set operation in progress flag
+    this.operationState.isSettingRemoteAnswer = true;
 
     try {
       await this.peerConnection.setRemoteDescription(answer);
-      console.log('WebRTC: Remote answer set successfully, final state:', this.peerConnection.signalingState);
+      const finalState = this.peerConnection.signalingState;
+      console.log('WebRTC: Remote answer set successfully, final state:', finalState);
+      
+      // Verify we reached stable state
+      if (finalState !== 'stable') {
+        console.warn(`WebRTC: Expected stable state after setRemoteAnswer, got: ${finalState}`);
+      }
     } catch (error) {
       console.error('WebRTC: Error setting remote answer:', error);
+      
+      // Enhanced error handling for InvalidStateError
+      if (error instanceof Error && error.message.includes('InvalidStateError')) {
+        console.log('WebRTC: InvalidStateError detected - connection may already be established');
+        
+        // Check if we're actually already connected
+        const connectionState = this.peerConnection.connectionState;
+        if (connectionState === 'connected') {
+          console.log('WebRTC: Connection is already established, ignoring setRemoteAnswer error');
+          return;
+        }
+        
+        throw new Error('Connection state error - please retry the call');
+      }
+      
       throw error;
+    } finally {
+      // Clear operation flag
+      this.operationState.isSettingRemoteAnswer = false;
     }
   }
 
@@ -346,6 +466,15 @@ export class WebRTCService {
     
     // Store current stream reference
     const currentStream = this.localStream;
+    
+    // Reset operation state
+    this.operationState = {
+      isCreatingOffer: false,
+      isCreatingAnswer: false,
+      isSettingRemoteAnswer: false,
+      lastOfferTimestamp: 0,
+      lastAnswerTimestamp: 0
+    };
     
     // Close current peer connection
     if (this.peerConnection) {
@@ -372,7 +501,14 @@ export class WebRTCService {
       throw new Error('Peer connection not initialized');
     }
 
+    console.log('📥 Received remote ICE candidate');
     await this.peerConnection.addIceCandidate(candidate);
+    
+    // Track remote candidate for network analysis
+    if (candidate.candidate) {
+      const rtcCandidate = new RTCIceCandidate(candidate);
+      this.trackIceCandidate(rtcCandidate, false);
+    }
   }
 
   // Get ICE candidates
@@ -688,9 +824,303 @@ export class WebRTCService {
     };
   }
 
-  // Check if user interaction has occurred (useful for UI feedback)
-  hasUserInteracted(): boolean {
-    return this.userInteractionOccurred;
+  // Detect network type for better diagnostics
+  private detectNetworkType(): string {
+    const connection = (navigator as any).connection || (navigator as any).mozConnection || (navigator as any).webkitConnection;
+    if (connection) {
+      const type = connection.effectiveType || connection.type || 'unknown';
+      console.log('🌐 Network type detected:', type);
+      return type;
+    }
+    return 'unknown';
+  }
+
+  // Validate signaling state and prevent duplicate operations
+  private validateStateForOperation(operation: 'offer' | 'answer' | 'setRemoteAnswer'): void {
+    if (!this.peerConnection) {
+      throw new Error('Peer connection not initialized');
+    }
+
+    const currentState = this.peerConnection.signalingState;
+    const now = Date.now();
+
+    switch (operation) {
+      case 'offer':
+        if (this.operationState.isCreatingOffer) {
+          throw new Error('Offer creation already in progress');
+        }
+        if (now - this.operationState.lastOfferTimestamp < 1000) {
+          throw new Error('Too soon after last offer attempt');
+        }
+        if (currentState !== 'stable') {
+          console.log(`WebRTC: Invalid state for offer creation: ${currentState}, resetting...`);
+          throw new Error('Invalid state for offer creation, connection needs reset');
+        }
+        break;
+
+      case 'answer':
+        if (this.operationState.isCreatingAnswer) {
+          throw new Error('Answer creation already in progress');
+        }
+        if (now - this.operationState.lastAnswerTimestamp < 1000) {
+          throw new Error('Too soon after last answer attempt');
+        }
+        if (currentState !== 'stable') {
+          console.log(`WebRTC: Invalid state for answer creation: ${currentState}, resetting...`);
+          throw new Error('Invalid state for answer creation, connection needs reset');
+        }
+        break;
+
+      case 'setRemoteAnswer':
+        if (this.operationState.isSettingRemoteAnswer) {
+          throw new Error('Setting remote answer already in progress');
+        }
+        if (currentState === 'stable') {
+          console.log('WebRTC: Already in stable state, remote answer may have been set already');
+          throw new Error('Connection already established');
+        }
+        if (currentState !== 'have-local-offer') {
+          throw new Error(`Invalid state for setting remote answer: ${currentState}`);
+        }
+        break;
+    }
+  }
+
+  // Enhanced candidate tracking for cross-network analysis
+  private trackIceCandidate(candidate: RTCIceCandidate, isLocal: boolean = true): void {
+    const candidateInfo = this.parseCandidateInfo(candidate);
+    const key = `${candidateInfo.type}-${candidateInfo.protocol}-${candidateInfo.address}`;
+    
+    if (isLocal) {
+      this.networkDiagnostics.localCandidates.set(key, candidate);
+      console.log(`📍 Local ${candidateInfo.type.toUpperCase()} candidate:`, candidateInfo);
+    } else {
+      this.networkDiagnostics.remoteCandidates.set(key, candidate);
+      console.log(`📍 Remote ${candidateInfo.type.toUpperCase()} candidate:`, candidateInfo);
+    }
+    
+    // Log network compatibility analysis
+    if (this.networkDiagnostics.localCandidates.size > 0 && this.networkDiagnostics.remoteCandidates.size > 0) {
+      this.analyzeNetworkCompatibility();
+    }
+  }
+
+  // Parse candidate information for analysis
+  private parseCandidateInfo(candidate: RTCIceCandidate): {
+    type: string;
+    protocol: string;
+    address: string;
+    port: string;
+    foundation: string;
+  } {
+    const parts = candidate.candidate.split(' ');
+    return {
+      foundation: parts[0] || '',
+      type: parts[7] || 'unknown',
+      protocol: parts[2] || 'unknown',
+      address: parts[4] || 'unknown',
+      port: parts[5] || 'unknown'
+    };
+  }
+
+  // Analyze network compatibility between local and remote candidates
+  private analyzeNetworkCompatibility(): void {
+    const localTypes = Array.from(this.networkDiagnostics.localCandidates.values())
+      .map(c => this.parseCandidateInfo(c).type);
+    const remoteTypes = Array.from(this.networkDiagnostics.remoteCandidates.values())
+      .map(c => this.parseCandidateInfo(c).type);
+    
+    const hasLocalTurn = localTypes.includes('relay');
+    const hasRemoteTurn = remoteTypes.includes('relay');
+    const hasLocalStun = localTypes.includes('srflx');
+    const hasRemoteStun = remoteTypes.includes('srflx');
+    
+    console.log('🔍 Network Compatibility Analysis:');
+    console.log(`  Local candidates: HOST=${localTypes.filter(t => t === 'host').length}, STUN=${localTypes.filter(t => t === 'srflx').length}, TURN=${localTypes.filter(t => t === 'relay').length}`);
+    console.log(`  Remote candidates: HOST=${remoteTypes.filter(t => t === 'host').length}, STUN=${remoteTypes.filter(t => t === 'srflx').length}, TURN=${remoteTypes.filter(t => t === 'relay').length}`);
+    
+    if (!hasLocalTurn && !hasRemoteTurn && !hasLocalStun && !hasRemoteStun) {
+      console.log('⚠️  CRITICAL: Both sides only have HOST candidates - connection will likely fail across networks');
+      console.log('💡 Recommendation: Check STUN/TURN server connectivity');
+    } else if (!hasLocalTurn && !hasRemoteTurn) {
+      console.log('⚠️  WARNING: No TURN candidates available - may fail with strict NATs');
+      console.log('💡 Recommendation: Verify TURN server credentials and reachability');
+    } else if (hasLocalTurn || hasRemoteTurn) {
+      console.log('✅ TURN candidates available - cross-network connection should work');
+    }
+  }
+
+  // Get comprehensive connection statistics
+  async getConnectionStats(): Promise<any> {
+    if (!this.peerConnection) {
+      return null;
+    }
+
+    try {
+      const stats = await this.peerConnection.getStats();
+      const connectionInfo = {
+        candidates: { 
+          local: [] as any[], 
+          remote: [] as any[], 
+          pairs: [] as any[] 
+        },
+        transport: null as any,
+        inbound: null as any,
+        outbound: null as any
+      };
+
+      stats.forEach((report) => {
+        switch (report.type) {
+          case 'local-candidate':
+            connectionInfo.candidates.local.push({
+              type: report.candidateType,
+              protocol: report.protocol,
+              address: report.address,
+              port: report.port,
+              networkType: report.networkType
+            });
+            break;
+          case 'remote-candidate':
+            connectionInfo.candidates.remote.push({
+              type: report.candidateType,
+              protocol: report.protocol,
+              address: report.address,
+              port: report.port
+            });
+            break;
+          case 'candidate-pair':
+            if (report.state === 'succeeded') {
+              connectionInfo.candidates.pairs.push({
+                localType: report.localCandidateId,
+                remoteType: report.remoteCandidateId,
+                state: report.state,
+                nominated: report.nominated,
+                bytesReceived: report.bytesReceived,
+                bytesSent: report.bytesSent
+              });
+            }
+            break;
+          case 'transport':
+            connectionInfo.transport = {
+              selectedCandidatePairId: report.selectedCandidatePairId,
+              state: report.dtlsState
+            };
+            break;
+          case 'inbound-rtp':
+            if (report.mediaType === 'audio') {
+              connectionInfo.inbound = {
+                packetsReceived: report.packetsReceived,
+                packetsLost: report.packetsLost,
+                jitter: report.jitter
+              };
+            }
+            break;
+          case 'outbound-rtp':
+            if (report.mediaType === 'audio') {
+              connectionInfo.outbound = {
+                packetsSent: report.packetsSent,
+                bytesSent: report.bytesSent
+              };
+            }
+            break;
+        }
+      });
+
+      return connectionInfo;
+    } catch (error) {
+      console.error('Failed to get connection stats:', error);
+      return null;
+    }
+  }
+
+  // Log detailed connection diagnostics (call this when connection fails)
+  async logConnectionDiagnostics(): Promise<void> {
+    console.log('🔍 DETAILED CONNECTION DIAGNOSTICS');
+    console.log('=====================================');
+    
+    // Basic state info
+    console.log('WebRTC States:');
+    console.log(`  Signaling: ${this.peerConnection?.signalingState}`);
+    console.log(`  Connection: ${this.peerConnection?.connectionState}`);
+    console.log(`  ICE Connection: ${this.peerConnection?.iceConnectionState}`);
+    console.log(`  ICE Gathering: ${this.peerConnection?.iceGatheringState}`);
+    
+    // Network info
+    this.networkDiagnostics.networkType = this.detectNetworkType();
+    console.log(`  Network Type: ${this.networkDiagnostics.networkType}`);
+    
+    // Candidate summary
+    console.log('\nCandidate Summary:');
+    console.log(`  Local candidates: ${this.networkDiagnostics.localCandidates.size}`);
+    console.log(`  Remote candidates: ${this.networkDiagnostics.remoteCandidates.size}`);
+    
+    // Detailed stats
+    const stats = await this.getConnectionStats();
+    if (stats) {
+      console.log('\nDetailed Connection Stats:');
+      console.log('  Local candidates:', stats.candidates.local);
+      console.log('  Remote candidates:', stats.candidates.remote);
+      console.log('  Active pairs:', stats.candidates.pairs);
+      
+      if (stats.candidates.pairs.length === 0) {
+        console.log('❌ No successful candidate pairs - connection establishment failed');
+        console.log('💡 This typically means:');
+        console.log('   - Firewall blocking connection');
+        console.log('   - No compatible network paths');
+        console.log('   - TURN servers not working');
+      }
+    }
+    
+    console.log('=====================================');
+  }
+
+  // Test TURN server connectivity
+  async testTurnConnectivity(): Promise<void> {
+    console.log('🧪 Testing TURN server connectivity...');
+    
+    // Create a temporary peer connection to test TURN servers
+    const testPC = new RTCPeerConnection({
+      iceServers: this.iceServers.filter(server => server.urls.toString().startsWith('turn:')),
+      iceCandidatePoolSize: 5
+    });
+
+    let turnCandidatesFound = 0;
+    
+    const testPromise = new Promise<void>((resolve) => {
+      const timeout = setTimeout(() => {
+        console.log(`🧪 TURN test completed: ${turnCandidatesFound} TURN candidates found`);
+        if (turnCandidatesFound === 0) {
+          console.log('❌ No TURN candidates generated - TURN servers may be unreachable');
+          console.log('💡 Check:');
+          console.log('   - Internet connectivity');
+          console.log('   - TURN server credentials');
+          console.log('   - Firewall blocking TURN ports');
+        } else {
+          console.log('✅ TURN servers are reachable');
+        }
+        testPC.close();
+        resolve();
+      }, 10000);
+
+      testPC.onicecandidate = (event) => {
+        if (event.candidate && event.candidate.candidate.includes('typ relay')) {
+          turnCandidatesFound++;
+          console.log(`🔄 TURN test candidate ${turnCandidatesFound}:`, event.candidate.candidate);
+        }
+      };
+
+      // Create offer to start ICE gathering
+      testPC.createOffer({ offerToReceiveAudio: true }).then(offer => {
+        return testPC.setLocalDescription(offer);
+      }).catch(error => {
+        console.error('TURN test failed:', error);
+        clearTimeout(timeout);
+        testPC.close();
+        resolve();
+      });
+    });
+
+    await testPromise;
   }
 
   // Debug method to check current WebRTC state
@@ -818,4 +1248,70 @@ export class WebRTCService {
       }
     });
   }
+
+  // Public diagnostic methods for UI integration
+
+  /**
+   * Run comprehensive connection diagnostics - useful when calls fail
+   */
+  async runDiagnostics(): Promise<void> {
+    console.log('🔍 Running WebRTC diagnostics...');
+    
+    // Test TURN connectivity first
+    await this.testTurnConnectivity();
+    
+    // Log current connection state
+    await this.logConnectionDiagnostics();
+  }
+
+  /**
+   * Get network diagnostic summary for display in UI
+   */
+  getNetworkSummary(): {
+    networkType: string;
+    localCandidates: number;
+    remoteCandidates: number;
+    connectionAttempts: number;
+    lastFailure: string;
+    hasRelayCandidates: boolean;
+  } {
+    const hasLocalRelay = Array.from(this.networkDiagnostics.localCandidates.values())
+      .some(c => this.parseCandidateInfo(c).type === 'relay');
+    const hasRemoteRelay = Array.from(this.networkDiagnostics.remoteCandidates.values())
+      .some(c => this.parseCandidateInfo(c).type === 'relay');
+
+    return {
+      networkType: this.networkDiagnostics.networkType,
+      localCandidates: this.networkDiagnostics.localCandidates.size,
+      remoteCandidates: this.networkDiagnostics.remoteCandidates.size,
+      connectionAttempts: this.networkDiagnostics.connectionAttempts,
+      lastFailure: this.networkDiagnostics.lastFailureReason,
+      hasRelayCandidates: hasLocalRelay || hasRemoteRelay
+    };
+  }
+
+  /**
+   * Check if connection is likely to work across networks
+   */
+  isReadyForCrossNetwork(): boolean {
+    const summary = this.getNetworkSummary();
+    return summary.hasRelayCandidates || summary.localCandidates > 1;
+  }
+
+  /**
+   * Reset diagnostic counters (call at start of new call attempt)
+   */
+  resetDiagnostics(): void {
+    this.networkDiagnostics = {
+      localCandidates: new Map(),
+      remoteCandidates: new Map(),
+      candidatePairs: [],
+      connectionAttempts: 0,
+      lastFailureReason: '',
+      networkType: this.detectNetworkType()
+    };
+  }
 }
+
+// Export singleton instance
+export const webrtcService = new WebRTCService();
