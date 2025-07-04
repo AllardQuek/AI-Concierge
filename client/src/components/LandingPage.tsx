@@ -30,6 +30,7 @@ const LandingPage: React.FC = () => {
   
   const socketRef = useRef<SocketService | null>(null);
   const webrtcRef = useRef<WebRTCService | null>(null);
+  const currentCallPartnerRef = useRef<string>('');
   const ringIntervalRef = useRef<number | null>(null);
   const callTimeoutRef = useRef<number | null>(null);
   const callDurationIntervalRef = useRef<number | null>(null);
@@ -205,7 +206,7 @@ const LandingPage: React.FC = () => {
           // Add a small delay to ensure the call is properly established
           setTimeout(() => {
             console.log(`⏰ Setting up incoming call state...`);
-            setCurrentCallPartner(callerCode);
+            updateCurrentCallPartner(callerCode);
             setCallState('incoming');
             setIsRinging(true);
             
@@ -266,7 +267,7 @@ const LandingPage: React.FC = () => {
     // This effect ensures proper cleanup when transitioning from connected to idle
     if (callState === 'idle' && currentCallPartner) {
       stopCallDurationTimer(); // Stop timer when call ends
-      setCurrentCallPartner('');
+      updateCurrentCallPartner('');
       setError('');
     }
   }, [callState, currentCallPartner]);
@@ -434,10 +435,20 @@ const LandingPage: React.FC = () => {
     // Handle ICE candidates
     webrtcRef.current.onIceCandidate((candidate: RTCIceCandidate) => {
       if (socketRef.current && candidate) {
-        console.log('🧊 Sending ICE candidate to:', currentCallPartner);
+        // Use ref to avoid React state closure issues
+        const targetPartner = currentCallPartnerRef.current;
+        
+        console.log('🧊 Sending ICE candidate to:', targetPartner);
+        
+        if (!targetPartner) {
+          console.warn('⚠️ Cannot send ICE candidate - no current call partner set');
+          console.warn('This may indicate a timing issue in call setup');
+          return;
+        }
+        
         socketRef.current.emit('ice-candidate', {
           candidate: candidate.toJSON(),
-          targetUserId: currentCallPartner
+          targetUserId: targetPartner
         });
       }
     });
@@ -538,7 +549,7 @@ const LandingPage: React.FC = () => {
       socketRef.current.emit('decline-call', { callerCode: currentCallPartner });
     }
     setCallState('idle');
-    setCurrentCallPartner('');
+    updateCurrentCallPartner('');
     // Clean up stored offer
     if ((window as any).incomingOffer) {
       delete (window as any).incomingOffer;
@@ -555,7 +566,7 @@ const LandingPage: React.FC = () => {
       console.log(`   Original input: "${friendNumber.trim()}"`);
       console.log(`   Normalized to: "${normalizedNumber}"`);
       
-      setCurrentCallPartner(normalizedNumber);
+      updateCurrentCallPartner(normalizedNumber);
       setCallState('outgoing');
       setError('');
       
@@ -643,7 +654,7 @@ const LandingPage: React.FC = () => {
     // Clean up call state
     cleanup();
     setCallState('idle');
-    setCurrentCallPartner('');
+    updateCurrentCallPartner('');
     setError('');
   };
 
@@ -704,7 +715,7 @@ const LandingPage: React.FC = () => {
     
     // Reset state
     setCallState('idle');
-    setCurrentCallPartner('');
+    updateCurrentCallPartner('');
     setError('');
     
     // Reinitialize services if needed
@@ -793,6 +804,13 @@ const LandingPage: React.FC = () => {
 
   // Get the current phone number validation status
   const phoneValidation = validatePhoneNumber(friendNumber);
+
+  // Helper function to update current call partner (both state and ref)
+  const updateCurrentCallPartner = (partner: string) => {
+    setCurrentCallPartner(partner);
+    currentCallPartnerRef.current = partner;
+    console.log('📱 Updated current call partner to:', partner || '(empty)');
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
