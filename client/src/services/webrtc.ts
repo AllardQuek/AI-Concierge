@@ -75,6 +75,9 @@ export class WebRTCService {
     lastAnswerTimestamp: 0
   };
 
+  // Pending ICE candidates queue (for candidates that arrive before remote description)
+  private pendingCandidates: RTCIceCandidateInit[] = [];
+
   constructor() {
     this.initializePeerConnection();
     this.setupMobileAudioSupport();
@@ -349,6 +352,9 @@ export class WebRTCService {
       const postSetState = this.peerConnection.signalingState;
       console.log('WebRTC: Signaling state after setRemoteDescription:', postSetState);
       
+      // Process any pending ICE candidates now that remote description is set
+      await this.processPendingCandidates();
+      
       // Create and set local answer
       console.log('🔄 Creating WebRTC answer...');
       const answer = await this.peerConnection.createAnswer({
@@ -384,6 +390,10 @@ export class WebRTCService {
           // Retry once with completely fresh peer connection
           await this.getUserMedia();
           await this.peerConnection!.setRemoteDescription(offer);
+          
+          // Process any pending ICE candidates after setting remote description
+          await this.processPendingCandidates();
+          
           const retryAnswer = await this.peerConnection!.createAnswer();
           await this.peerConnection!.setLocalDescription(retryAnswer);
           return retryAnswer;
@@ -394,6 +404,10 @@ export class WebRTCService {
           // Retry once with fresh peer connection
           await this.getUserMedia();
           await this.peerConnection!.setRemoteDescription(offer);
+          
+          // Process any pending ICE candidates after setting remote description
+          await this.processPendingCandidates();
+          
           const retryAnswer = await this.peerConnection!.createAnswer();
           await this.peerConnection!.setLocalDescription(retryAnswer);
           return retryAnswer;
@@ -431,6 +445,9 @@ export class WebRTCService {
       await this.peerConnection.setRemoteDescription(answer);
       const finalState = this.peerConnection.signalingState;
       console.log('WebRTC: Remote answer set successfully, final state:', finalState);
+      
+      // Process any pending ICE candidates now that remote description is set
+      await this.processPendingCandidates();
       
       // Verify we reached stable state
       if (finalState !== 'stable') {
@@ -476,6 +493,10 @@ export class WebRTCService {
       lastAnswerTimestamp: 0
     };
     
+    // Clear pending candidates queue
+    this.pendingCandidates = [];
+    console.log('WebRTC: Cleared pending candidates queue');
+    
     // Close current peer connection
     if (this.peerConnection) {
       this.peerConnection.close();
@@ -502,12 +523,46 @@ export class WebRTCService {
     }
 
     console.log('📥 Received remote ICE candidate');
-    await this.peerConnection.addIceCandidate(candidate);
     
-    // Track remote candidate for network analysis
-    if (candidate.candidate) {
-      const rtcCandidate = new RTCIceCandidate(candidate);
-      this.trackIceCandidate(rtcCandidate, false);
+    // Check if remote description is set
+    if (!this.peerConnection.remoteDescription) {
+      console.log('⏳ Remote description not set yet, queuing ICE candidate');
+      this.pendingCandidates.push(candidate);
+      return;
+    }
+
+    // Check if peer connection is in a valid state for adding candidates
+    const signalingState = this.peerConnection.signalingState;
+    if (signalingState === 'closed') {
+      console.log('⚠️ Cannot add ICE candidate - peer connection is closed');
+      return;
+    }
+
+    try {
+      await this.peerConnection.addIceCandidate(candidate);
+      console.log('✅ ICE candidate added successfully');
+      
+      // Track remote candidate for network analysis
+      if (candidate.candidate) {
+        const rtcCandidate = new RTCIceCandidate(candidate);
+        this.trackIceCandidate(rtcCandidate, false);
+      }
+    } catch (error) {
+      console.error('❌ Failed to add ICE candidate:', error);
+      
+      // Log detailed error information for debugging
+      if (error instanceof Error) {
+        console.error('Error details:', {
+          message: error.message,
+          remoteDescription: this.peerConnection.remoteDescription ? 'set' : 'null',
+          signalingState: this.peerConnection.signalingState,
+          connectionState: this.peerConnection.connectionState,
+          candidate: candidate.candidate
+        });
+      }
+      
+      // Don't throw - this is non-critical for established connections
+      // Just log the error and continue
     }
   }
 
@@ -572,6 +627,10 @@ export class WebRTCService {
       console.log('WebRTC: Cleanup - signaling state:', this.peerConnection.signalingState);
       console.log('WebRTC: Cleanup - connection state:', this.peerConnection.connectionState);
     }
+    
+    // Clear pending candidates queue
+    this.pendingCandidates = [];
+    console.log('WebRTC: Cleared pending candidates queue during cleanup');
     
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => {
@@ -1310,6 +1369,38 @@ export class WebRTCService {
       lastFailureReason: '',
       networkType: this.detectNetworkType()
     };
+  }
+
+  // Process pending ICE candidates after remote description is set
+  private async processPendingCandidates(): Promise<void> {
+    if (this.pendingCandidates.length === 0) {
+      return;
+    }
+
+    console.log(`🔄 Processing ${this.pendingCandidates.length} pending ICE candidates...`);
+    
+    // Process all pending candidates
+    for (const candidate of this.pendingCandidates) {
+      try {
+        if (this.peerConnection && this.peerConnection.remoteDescription) {
+          await this.peerConnection.addIceCandidate(candidate);
+          console.log('✅ Processed pending ICE candidate');
+          
+          // Track remote candidate for network analysis
+          if (candidate.candidate) {
+            const rtcCandidate = new RTCIceCandidate(candidate);
+            this.trackIceCandidate(rtcCandidate, false);
+          }
+        }
+      } catch (error) {
+        console.error('❌ Failed to process pending ICE candidate:', error);
+        // Continue processing other candidates even if one fails
+      }
+    }
+    
+    // Clear the pending candidates queue
+    this.pendingCandidates = [];
+    console.log('✅ Finished processing pending ICE candidates');
   }
 }
 

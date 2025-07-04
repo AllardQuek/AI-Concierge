@@ -82,24 +82,39 @@ When connections fail quickly, the app now shows:
 ## Technical Improvements Made
 
 ### Enhanced Error Messages
+
 Instead of generic "Connection lost", you'll now see:
+
 - **"Quick disconnect detected - network stability issues"**
 - **"Connection failed - network incompatibility detected"**
 - **Specific recommendations** based on connection duration
 
+### ICE Candidate Error Handling
+
+Fixed the `InvalidStateError` on `addIceCandidate` by:
+
+- **Pending candidates queue**: ICE candidates arriving before remote description are queued
+- **State validation**: Check if remote description is set before adding candidates
+- **Graceful error handling**: Log detailed error info without crashing the connection
+- **Automatic processing**: Queued candidates are processed after remote description is set
+
 ### Connection Recovery
+
 - **Automatic ICE restart** on connection failures
 - **Connection statistics** to track improvement over time
 - **Smart retry logic** that adapts to network conditions
+- **Robust state management** to prevent race conditions
 
 ### Better Diagnostics Panel
+
 - **Real-time connection stats** during errors
-- **Network quality assessment** 
+- **Network quality assessment**
 - **Targeted troubleshooting tips** based on your specific issue
 
 ## Expected Results
 
 With these improvements, you should see:
+
 1. **Clearer understanding** of why connections fail
 2. **Specific solutions** rather than generic "try again"
 3. **Better success rates** as you optimize your network
