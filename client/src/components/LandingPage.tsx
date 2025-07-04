@@ -17,6 +17,17 @@ const LandingPage: React.FC = () => {
   const [isRinging, setIsRinging] = useState(false);
   const [callDuration, setCallDuration] = useState(0);
   
+  // Enhanced connection stability monitoring
+  const [connectionStats, setConnectionStats] = useState({
+    connectionsAttempted: 0,
+    connectionsSucceeded: 0,
+    averageConnectionDuration: 0,
+    lastDisconnectReason: '',
+    networkQuality: 'unknown' as 'excellent' | 'good' | 'poor' | 'unknown'
+  });
+  const connectionStartTimeRef = useRef<number | null>(null);
+  const connectionStatsRef = useRef(connectionStats);
+  
   const socketRef = useRef<SocketService | null>(null);
   const webrtcRef = useRef<WebRTCService | null>(null);
   const ringIntervalRef = useRef<number | null>(null);
@@ -260,6 +271,11 @@ const LandingPage: React.FC = () => {
     }
   }, [callState, currentCallPartner]);
 
+  // Update connection stats state when ref changes
+  useEffect(() => {
+    setConnectionStats(connectionStatsRef.current);
+  }, [connectionStatsRef.current]);
+
   const startRingingEffect = () => {
     // Try to vibrate on mobile devices
     if (navigator.vibrate) {
@@ -339,21 +355,79 @@ const LandingPage: React.FC = () => {
       console.log('🔗 WebRTC connection state:', state);
       
       if (state === 'connected') {
+        // Track connection start time for stability monitoring
+        connectionStartTimeRef.current = Date.now();
+        connectionStatsRef.current.connectionsSucceeded++;
+        
         setCallState('connected');
         setError(''); // Clear any previous errors
         startCallDurationTimer(); // Start timing the call
+        
         // Clear connection timeout since we're now connected
         if (callTimeoutRef.current) {
           clearTimeout(callTimeoutRef.current);
           callTimeoutRef.current = null;
         }
+        
+        // Log connection success details
+        console.log('✅ WebRTC Connection Established Successfully');
+        console.log(`📊 Connection attempt #${connectionStatsRef.current.connectionsSucceeded}`);
+        
+        // Check connection quality after a brief delay
+        setTimeout(() => {
+          if (webrtcRef.current) {
+            webrtcRef.current.getConnectionStats().then(stats => {
+              console.log('📈 Connection quality stats:', stats);
+            }).catch(err => console.warn('Failed to get connection stats:', err));
+          }
+        }, 2000);
+        
       } else if (state === 'disconnected' || state === 'failed') {
+        // Calculate connection duration for stability analysis
+        let connectionDuration = 0;
+        if (connectionStartTimeRef.current) {
+          connectionDuration = Date.now() - connectionStartTimeRef.current;
+          console.log(`⏱️ Connection lasted: ${connectionDuration}ms`);
+          
+          // Update average connection duration
+          const currentAvg = connectionStatsRef.current.averageConnectionDuration;
+          const newAvg = currentAvg === 0 ? connectionDuration : (currentAvg + connectionDuration) / 2;
+          connectionStatsRef.current.averageConnectionDuration = newAvg;
+          
+          // Classify connection quality based on duration
+          if (connectionDuration < 5000) { // Less than 5 seconds
+            connectionStatsRef.current.networkQuality = 'poor';
+            connectionStatsRef.current.lastDisconnectReason = 'Very short connection - likely network issues';
+          } else if (connectionDuration < 30000) { // Less than 30 seconds
+            connectionStatsRef.current.networkQuality = 'good';
+            connectionStatsRef.current.lastDisconnectReason = 'Short connection - possible network instability';
+          } else {
+            connectionStatsRef.current.networkQuality = 'excellent';
+            connectionStatsRef.current.lastDisconnectReason = 'Normal disconnection';
+          }
+          
+          console.log(`📊 Network Quality Assessment: ${connectionStatsRef.current.networkQuality}`);
+          console.log(`📊 Disconnect Reason: ${connectionStatsRef.current.lastDisconnectReason}`);
+        }
+        
         if (callState !== 'idle') { // Avoid duplicate disconnect handling
           console.log('🔗 WebRTC connection lost');
+          
+          // Provide specific error messages based on connection duration
+          if (connectionDuration > 0 && connectionDuration < 5000) {
+            setError('⚠️ Quick disconnect detected - network stability issues. Try moving closer to WiFi or check mobile signal.');
+          } else if (state === 'failed') {
+            setError('❌ Connection failed - network incompatibility detected. This may require TURN servers for your network setup.');
+          } else {
+            setError('Connection lost');
+          }
+          
           setCallState('idle');
-          setError('Connection lost');
         }
         stopCallDurationTimer(); // Stop timing when disconnected
+      } else if (state === 'connecting') {
+        connectionStatsRef.current.connectionsAttempted++;
+        console.log(`🔄 Connection attempt #${connectionStatsRef.current.connectionsAttempted}`);
       }
     });
 
@@ -878,6 +952,35 @@ const LandingPage: React.FC = () => {
               {error && (
                 <div className="mb-6 space-y-3">
                   <ErrorMessage message={error} />
+                  
+                  {/* Show network quality info if we have connection stats */}
+                  {connectionStatsRef.current.connectionsAttempted > 0 && (
+                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm">
+                      <p className="font-semibold text-yellow-800 mb-2">🔍 Connection Diagnostics:</p>
+                      <div className="space-y-1 text-yellow-700">
+                        <p>• Attempts: {connectionStatsRef.current.connectionsAttempted}</p>
+                        <p>• Successful: {connectionStatsRef.current.connectionsSucceeded}</p>
+                        {connectionStatsRef.current.averageConnectionDuration > 0 && (
+                          <p>• Avg Duration: {Math.round(connectionStatsRef.current.averageConnectionDuration / 1000)}s</p>
+                        )}
+                        <p>• Quality: {connectionStatsRef.current.networkQuality}</p>
+                      </div>
+                      
+                      {/* Network-specific recommendations */}
+                      {connectionStatsRef.current.networkQuality === 'poor' && (
+                        <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
+                          <p className="font-semibold">💡 Quick Fix Suggestions:</p>
+                          <ul className="mt-1 space-y-1">
+                            <li>• Move closer to your WiFi router</li>
+                            <li>• Switch from WiFi to mobile data (or vice versa)</li>
+                            <li>• Check if other devices on your network are using bandwidth</li>
+                            <li>• Try calling again in a few minutes</li>
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
                   <Button
                     onClick={recoverFromError}
                     variant="secondary"
