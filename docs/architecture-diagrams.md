@@ -67,31 +67,32 @@ sequenceDiagram
     participant U1 as User 1 (Caller)
     participant S as Signaling Server
     participant U2 as User 2 (Callee)
-    
+
     U1->>S: Enter phone number & initiate call
     S->>U2: Incoming call notification
     Note over U2: Phone rings, user can accept/decline
-    
+
     alt User accepts call
         U2->>S: Accept call
         S->>U1: Call accepted
-        
+
         Note over U1,U2: WebRTC ICE/SDP Exchange via Server
         U1->>S: ICE candidates & SDP offer
         S->>U2: Forward ICE/SDP
         U2->>S: ICE candidates & SDP answer
         S->>U1: Forward ICE/SDP
-        
+
         Note over U1,U2: Direct P2P Audio Connection Established
-        U1<-->U2: WebRTC Audio Stream (bypasses server)
-        
+        U1->>U2: WebRTC Audio Stream
+        U2->>U1: WebRTC Audio Stream
+
         Note over U1,U2: Call duration tracking, mute/unmute controls
-        
+
         alt Either user ends call
             U1->>S: End call
             S->>U2: Call ended
         end
-        
+
     else User declines call
         U2->>S: Decline call
         S->>U1: Call declined
@@ -102,6 +103,12 @@ sequenceDiagram
 ## 🎯 Key Architecture Principles
 
 ### WebRTC Peer-to-Peer Design
+![alt text](images/image.png)
+*https://www.metered.ca/tools/openrelay/stun-servers-and-friends/*
+
+![alt text](images/image-1.png)
+*https://www.metered.ca/tools/openrelay/*
+
 ```mermaid
 graph LR
     subgraph "Traditional Server-Based"

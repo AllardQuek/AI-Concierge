@@ -36,8 +36,8 @@ npm run dev
 
 1. **Open your browser** to `http://localhost:3000`
 2. **Grant microphone permissions** when prompted
-3. **Enter a Singapore phone number** (format: +65 XXXX XXXX)
-4. **Click "Start Call"** to begin the voice connection
+3. **Enter a phone number** (min. 8 digits, with or without extension)
+4. **Click "Call Number"** to begin the voice connection
 
 ## 📱 Testing Voice Calls
 

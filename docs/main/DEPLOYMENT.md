@@ -90,8 +90,6 @@ Railway offers $5/month in free credits, which is usually sufficient for POCs.
 ### Basic Health Checks
 - [ ] Visit frontend: `https://your-app.vercel.app`
 - [ ] Check backend health: `https://your-backend-url/health`
-- [ ] Agent interface: `https://your-app.vercel.app/agent`
-- [ ] Customer interface: `https://your-app.vercel.app/customer`
 
 ### Voice Communication Tests
 - [ ] **Cross-Device**: Open agent on one device, customer on another
@@ -183,8 +181,6 @@ Update these with your actual URLs:
 
 - **Frontend:** `https://sybil-voice.vercel.app`
 - **Backend:** `https://sybil-backend.onrender.com`
-- **Agent:** `https://sybil-voice.vercel.app/agent`  
-- **Customer:** `https://sybil-voice.vercel.app/customer`
 - **Health:** `https://sybil-backend.onrender.com/health`
 
 🎉 **Success!** Your Sybil voice platform is now live and ready for testing!
