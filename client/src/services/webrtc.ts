@@ -14,45 +14,28 @@ export class WebRTCService {
     // Primary Google STUN servers (most reliable)
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    
-    // Additional STUN servers for redundancy
-    { urls: 'stun:stun.stunprotocol.org:3478' },
-    { urls: 'stun:stun.ekiga.net' },
-    
-    // Multiple TURN servers for better connectivity
+    { urls: "stun:stun.relay.metered.ca:80" },
+
+    // OpenRelay TURN servers
     {
-      urls: 'turn:openrelay.metered.ca:80',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
+      urls: "turn:global.relay.metered.ca:80",
+      username: "59f8df0859fbdb98eb74c743",
+      credential: "+V+v/RakNOJB5308",
     },
     {
-      urls: 'turn:openrelay.metered.ca:443',
-      username: 'openrelayproject', 
-      credential: 'openrelayproject'
+      urls: "turn:global.relay.metered.ca:80?transport=tcp",
+      username: "59f8df0859fbdb98eb74c743",
+      credential: "+V+v/RakNOJB5308",
     },
     {
-      urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-      username: 'openrelayproject',
-      credential: 'openrelayproject'
-    },
-    // Additional TURN servers for redundancy
-    {
-      urls: 'turn:relay.backups.cz',
-      username: 'webrtc',
-      credential: 'webrtc'
+      urls: "turn:global.relay.metered.ca:443",
+      username: "59f8df0859fbdb98eb74c743",
+      credential: "+V+v/RakNOJB5308",
     },
     {
-      urls: 'turn:relay.backups.cz:443',
-      username: 'webrtc',
-      credential: 'webrtc'
-    },
-    // Xirsys public TURN (limited but good for testing)
-    {
-      urls: 'turn:global.turn.twilio.com:3478?transport=udp',
-      username: 'f4b4035e68678bf6de4b747dd63ad9f8b8e5e0d8f5c4d9e8a6b7c3d2e1f0a9b8',
-      credential: 'f4b4035e68678bf6de4b747dd63ad9f8b8e5e0d8f5c4d9e8a6b7c3d2e1f0a9b8'
+      urls: "turns:global.relay.metered.ca:443?transport=tcp",
+      username: "59f8df0859fbdb98eb74c743",
+      credential: "+V+v/RakNOJB5308",
     }
   ];
 

@@ -61,7 +61,9 @@ const LandingPage: React.FC = () => {
 
   // Handle Enter key press to submit call
   const handlePhoneNumberKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && friendNumber.trim()) {
+    // Check if number is valid before calling
+    console.log(validatePhoneNumber(friendNumber));
+    if (e.key === 'Enter' && validatePhoneNumber(friendNumber).isValid) {
       handleCallFriend();
     }
   };
@@ -837,7 +839,7 @@ const LandingPage: React.FC = () => {
                   type="text"
                   value={friendNumber}
                   onChange={handlePhoneNumberChange}
-                  onKeyPress={handlePhoneNumberKeyPress}
+                  onKeyUp={handlePhoneNumberKeyPress}
                   placeholder="Enter phone number"
                   className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-lg font-mono tracking-wider ${
                     friendNumber.trim() && !phoneValidation.isValid 
