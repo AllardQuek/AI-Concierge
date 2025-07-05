@@ -62,7 +62,6 @@ const LandingPage: React.FC = () => {
   // Handle Enter key press to submit call
   const handlePhoneNumberKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     // Check if number is valid before calling
-    console.log(validatePhoneNumber(friendNumber));
     if (e.key === 'Enter' && validatePhoneNumber(friendNumber).isValid) {
       handleCallFriend();
     }
