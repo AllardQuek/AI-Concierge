@@ -340,14 +340,23 @@ export class AzureTranscriptionService {
       this.socket.stopTranscription();
     }
 
-    // Clean up audio processing
+    // Clean up audio processing - do this immediately to stop audio flow
     if (this.audioProcessor) {
       console.log('🔊 Disconnecting audio processor...');
+      
+      // For AudioWorkletNode, close the port first to stop message processing
+      if (this.audioProcessor instanceof AudioWorkletNode) {
+        console.log('🔊 Closing AudioWorklet port...');
+        this.audioProcessor.port.close();
+      }
+      
+      // Then disconnect the processor
       this.audioProcessor.disconnect();
       this.audioProcessor = null;
       console.log('🔊 Audio processor disconnected and nulled');
     }
 
+    // Close audio context to stop all audio processing
     if (this.audioContext) {
       console.log('🔊 Closing audio context...');
       this.audioContext.close();

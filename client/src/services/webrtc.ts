@@ -1,5 +1,5 @@
 // WebRTC Service for handling peer-to-peer voice connections
-import { TranscriptionService, TranscriptionResult } from './transcription';
+import { TranscriptionResult } from './types';
 import { AzureTranscriptionService } from './azure-transcription';
 
 export class WebRTCService {
@@ -13,11 +13,10 @@ export class WebRTCService {
   private userInteractionOccurred: boolean = false;
   
   // Transcription service
-  private transcriptionService: TranscriptionService | null = null;
   private azureTranscriptionService: AzureTranscriptionService | null = null;
   private conversationId: string | null = null;
   private participantId: string | null = null;
-  private existingSocket: any = null;
+
   private onTranscriptionCallback?: (result: TranscriptionResult) => void;
   private onTranscriptionErrorCallback?: (error: string) => void;
 
@@ -673,36 +672,27 @@ export class WebRTCService {
     this.conversationId = conversationId;
     this.participantId = participantId;
     
-    // Store the existing socket for use when starting transcription
-    this.existingSocket = existingSocket;
+
     
     // Initialize Azure transcription service with the socket
     if (existingSocket) {
       this.azureTranscriptionService = new AzureTranscriptionService(existingSocket);
       
       // Set up transcription callbacks
-      this.azureTranscriptionService.onTranscription((result) => {
+      this.azureTranscriptionService.onTranscription((result: TranscriptionResult) => {
         if (this.onTranscriptionCallback) {
           this.onTranscriptionCallback(result);
         }
       });
       
-      this.azureTranscriptionService.onError((error) => {
+      this.azureTranscriptionService.onError((error: string) => {
         console.error('Azure transcription error:', error);
+        if (this.onTranscriptionErrorCallback) {
+          this.onTranscriptionErrorCallback(error);
+        }
       });
     } else {
-      // Fallback to old transcription service if no socket provided
-      this.transcriptionService = new TranscriptionService();
-      
-      this.transcriptionService.onTranscription((result) => {
-        if (this.onTranscriptionCallback) {
-          this.onTranscriptionCallback(result);
-        }
-      });
-      
-      this.transcriptionService.onError((error) => {
-        console.error('Transcription error:', error);
-      });
+      console.warn('🎤 No socket provided for transcription - transcription will not be available');
     }
     
     console.log('🎤 Transcription enabled for conversation:', conversationId, 'participant:', participantId);
@@ -722,43 +712,23 @@ export class WebRTCService {
           this.participantId
         );
         
-        // Wire up error callbacks
-        this.azureTranscriptionService.onError((error: string) => {
-          console.error('WebRTC: Azure transcription error:', error);
-          if (this.onTranscriptionErrorCallback) {
-            this.onTranscriptionErrorCallback(error);
-          }
-        });
-        
-        this.azureTranscriptionService.onTranscription((transcript: TranscriptionResult) => {
-          if (this.onTranscriptionCallback) {
-            this.onTranscriptionCallback(transcript);
-          }
-        });
-        
         console.log('🎤 Azure transcription started');
-      } else if (this.transcriptionService) {
-        // Fallback to old transcription service
-        await this.transcriptionService.startTranscription(
-          stream,
-          this.conversationId,
-          this.participantId,
-          this.existingSocket
-        );
-        console.log('🎤 Fallback transcription started');
+      } else {
+        console.warn('🎤 No transcription service available - transcription not started');
       }
     } catch (error) {
       console.error('Failed to start transcription:', error);
     }
   }
 
-  private stopTranscription(): void {
+  private   stopTranscription(): void {
+    console.log('🎤 WebRTC: Stopping transcription...');
     if (this.azureTranscriptionService) {
       this.azureTranscriptionService.stopTranscription();
       this.azureTranscriptionService = null;
-    } else if (this.transcriptionService) {
-      this.transcriptionService.stopTranscription();
-      this.transcriptionService = null;
+      console.log('🎤 WebRTC: Transcription service stopped and nulled');
+    } else {
+      console.log('🎤 WebRTC: No transcription service to stop');
     }
   }
 
