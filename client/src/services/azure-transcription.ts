@@ -152,10 +152,16 @@ export class AzureTranscriptionService {
       this.participantId = participantId;
       this.fallbackMode = false;
 
-      console.log('🔊 Starting Azure transcription for conversation:', conversationId);
+      console.log('🔊 Starting transcription for conversation:', conversationId);
 
-      // Try to start Azure transcription
+      // Set up audio processing pipeline FIRST (this should always work)
+      console.log('🔊 Setting up audio processing pipeline...');
+      await this.setupAudioProcessing(audioStream);
+      console.log('🔊 Audio processing pipeline set up successfully');
+
+      // Try to start Azure transcription (this might fail, but audio processing is already working)
       if (this.socket) {
+        console.log('🔊 Attempting to start Azure transcription...');
         this.socket.startTranscription();
         
         // Send conversation ID and participant ID to backend for proper transcript association
@@ -163,48 +169,67 @@ export class AzureTranscriptionService {
           conversationId,
           participantId: this.participantId 
         });
+        console.log('🔊 Azure transcription request sent to server');
+      } else {
+        console.warn('🔊 No socket available for Azure transcription');
+        this.switchToFallbackMode();
       }
 
-      // Set up audio processing pipeline
-      await this.setupAudioProcessing(audioStream);
-
       this.isRecording = true;
-      console.log('🔊 Azure transcription started for participant:', participantId);
+      console.log('🔊 Transcription started for participant:', participantId);
+      console.log('🔊 Audio processing is active and sending data to server');
+      
     } catch (error) {
-      console.error('Failed to start Azure transcription:', error);
-      this.switchToFallbackMode();
+      console.error('Failed to start transcription:', error);
+      // Even if Azure fails, audio processing should still work
+      if (!this.isRecording) {
+        console.log('🔊 Audio processing failed, switching to fallback mode');
+        this.switchToFallbackMode();
+      } else {
+        console.log('🔊 Audio processing is working, but Azure transcription failed');
+        this.switchToFallbackMode();
+      }
     }
   }
 
   private async setupAudioProcessing(audioStream: MediaStream): Promise<void> {
     try {
+      console.log('🔊 Creating AudioContext...');
       this.audioContext = new AudioContext();
+      console.log('🔊 AudioContext created, state:', this.audioContext.state);
       
       // Handle mobile audio context suspension
       if (this.audioContext.state === 'suspended') {
         console.log('🔊 Audio context suspended, waiting for user interaction...');
         await this.audioContext.resume();
+        console.log('🔊 Audio context resumed, state:', this.audioContext.state);
       }
       
+      console.log('🔊 Creating MediaStreamSource from audio stream...');
       const source = this.audioContext.createMediaStreamSource(audioStream);
+      console.log('🔊 MediaStreamSource created successfully');
       
       // Try to load AudioWorklet first
       try {
-        console.log('🔊 Loading AudioWorklet...');
+        console.log('🔊 Loading AudioWorklet from /audio-processor.js...');
         await this.audioContext.audioWorklet.addModule('/audio-processor.js');
         console.log('🔊 AudioWorklet loaded successfully');
         
         // Create AudioWorkletNode
+        console.log('🔊 Creating AudioWorkletNode...');
         this.audioProcessor = new AudioWorkletNode(this.audioContext, 'audio-processor', {
           numberOfInputs: 1,
           numberOfOutputs: 1,
           outputChannelCount: [1]
         });
+        console.log('🔊 AudioWorkletNode created successfully');
         
         // Handle audio data from the worklet
         this.audioProcessor.port.onmessage = (event) => {
+          console.log('🔊 Received message from AudioWorklet:', event.data.type);
           if (event.data.type === 'audio-data' && this.isRecording) {
             const { data, duration } = event.data;
+            console.log(`🔊 Processing audio data: ${data.length} samples, duration: ${duration}s`);
             
             // Convert Float32Array to Uint8Array for sending to server
             const audioData = new Uint8Array(data.length);
@@ -229,8 +254,10 @@ export class AzureTranscriptionService {
 
         // Connect the audio nodes
         if (this.audioProcessor) {
+          console.log('🔊 Connecting audio nodes...');
           source.connect(this.audioProcessor as AudioNode);
           (this.audioProcessor as AudioNode).connect(this.audioContext.destination);
+          console.log('🔊 Audio nodes connected successfully');
         }
         
         console.log('🔊 AudioWorklet processing pipeline set up successfully');
@@ -253,13 +280,19 @@ export class AzureTranscriptionService {
     console.log('🔊 Using ScriptProcessorNode fallback');
     
     // Use ScriptProcessorNode as fallback
+    console.log('🔊 Creating ScriptProcessorNode...');
     this.audioProcessor = this.audioContext!.createScriptProcessor(4096, 1, 1) as any;
+    console.log('🔊 ScriptProcessorNode created successfully');
     
     (this.audioProcessor as any).onaudioprocess = (event: any) => {
-      if (!this.isRecording) return;
+      if (!this.isRecording) {
+        console.log('🔊 ScriptProcessor: Not recording, skipping audio processing');
+        return;
+      }
 
       const inputBuffer = event.inputBuffer;
       const inputData = inputBuffer.getChannelData(0);
+      console.log(`🔊 ScriptProcessor: Processing ${inputData.length} samples, duration: ${inputBuffer.duration}s`);
       
       // Convert to Uint8Array for sending to server
       const audioData = new Uint8Array(inputData.length);
@@ -281,8 +314,10 @@ export class AzureTranscriptionService {
       }
     };
 
+    console.log('🔊 Connecting ScriptProcessorNode...');
     source.connect(this.audioProcessor as AudioNode);
     (this.audioProcessor as AudioNode).connect(this.audioContext!.destination);
+    console.log('🔊 ScriptProcessorNode connected successfully');
     
     console.log('🔊 ScriptProcessorNode fallback set up successfully');
   }
