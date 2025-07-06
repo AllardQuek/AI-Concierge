@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { SocketService } from '../services/socket';
 import { WebRTCService } from '../services/webrtc';
 import CallInterface, { CallState as CallInterfaceState } from './CallInterface';
-import { TranscriptionResult } from '../services/transcription';
+import { TranscriptionResult } from '../services/types';
 import Header from './shared/Header.tsx';
 import CallInput from './shared/CallInput.tsx';
 import MyNumber from './shared/MyNumber.tsx';
@@ -475,6 +475,13 @@ const LandingPage: React.FC = () => {
 
     socketRef.current.on('call-declined', () => {
       console.log('📞 Call was declined');
+      
+      // Stop transcription if it's running
+      if (webrtcRef.current) {
+        console.log('🎤 Stopping transcription due to call declined');
+        webrtcRef.current.stopTranscriptionPublic();
+      }
+      
       setCallState('idle');
       setError('Call was declined');
       clearTimeout(callTimeoutRef.current!); // Clear connection timeout
@@ -482,6 +489,13 @@ const LandingPage: React.FC = () => {
 
     socketRef.current.on('call-ended', ({ fromCode }: { fromCode: string }) => {
       console.log(`📞 Call ended by ${fromCode}`);
+      
+      // Stop transcription if it's running
+      if (webrtcRef.current) {
+        console.log('🎤 Stopping transcription due to call ended by other party');
+        webrtcRef.current.stopTranscriptionPublic();
+      }
+      
       setCallState('idle');
       setError('Call ended by other party');
       clearTimeout(callTimeoutRef.current!); // Clear connection timeout
