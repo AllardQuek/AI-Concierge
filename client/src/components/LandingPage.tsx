@@ -925,7 +925,9 @@ const LandingPage: React.FC = () => {
             onRefresh={refreshMyNumber}
           />
           <StatusIndicator isConnected={isConnected} />
-          <Instructions />
+          <div className="mt-6">
+            <Instructions />
+          </div>
         </div>
         <Footer />
         {/* Call Interface Overlay - shows different content based on call state */}
