@@ -1,8 +1,28 @@
+// Load and validate environment configuration
+const { loadEnvironment, validateConfig, config } = require('./config/env');
+
+// Load environment variables
+loadEnvironment();
+
+// Validate configuration
+try {
+  validateConfig();
+  console.log(`🚀 Server starting in ${config.NODE_ENV} mode`);
+} catch (error) {
+  console.error('❌ Configuration validation failed:', error.message);
+  if (config.NODE_ENV === 'production') {
+    process.exit(1);
+  } else {
+    console.log('⚠️  Continuing in development mode with missing configuration');
+  }
+}
+
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const { attachAzureTranscriptionService, getConversationTranscripts, getAllConversationSummaries } = require('./azure-transcription-service');
 
 const app = express();
 const server = http.createServer(app);
@@ -34,6 +54,11 @@ const io = socketIo(server, {
   upgradeTimeout: 30000,
   allowUpgrades: true,
   transports: ['websocket', 'polling']
+});
+
+// Initialize Azure transcription service (includes storage and conversation management)
+attachAzureTranscriptionService(io).catch(error => {
+  console.error('Failed to initialize Azure transcription service:', error);
 });
 
 // Store peer-to-peer connections globally
@@ -73,6 +98,28 @@ app.get('/debug', (req, res) => {
     memoryUsage: process.memoryUsage(),
     environment: process.env.NODE_ENV || 'development'
   });
+});
+
+// Transcription API endpoints
+app.get('/api/transcripts/:conversationId', async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const transcripts = await getConversationTranscripts(conversationId);
+    res.json(transcripts);
+  } catch (error) {
+    console.error('Error fetching transcripts:', error);
+    res.status(500).json({ error: 'Failed to fetch transcripts' });
+  }
+});
+
+app.get('/api/transcripts', async (req, res) => {
+  try {
+    const summaries = await getAllConversationSummaries();
+    res.json(summaries);
+  } catch (error) {
+    console.error('Error fetching conversation summaries:', error);
+    res.status(500).json({ error: 'Failed to fetch conversation summaries' });
+  }
 });
 
 // Enhanced debug endpoint with detailed socket information
@@ -377,6 +424,12 @@ io.on('connection', (socket) => {
       socket.emit('left-room');
     }
   });
+
+  // ========== TRANSCRIPTION HANDLERS ==========
+  
+  // Azure transcription events are handled in azure-transcription-service.js
+  // The service automatically handles: start-transcription, audio-chunk, stop-transcription
+  // start-conversation, end-conversation events
 });
 
 const PORT = process.env.PORT || 3001;

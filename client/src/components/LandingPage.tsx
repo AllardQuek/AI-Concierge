@@ -1,7 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { PhoneIcon, Button, ConnectionStatus, ErrorMessage } from './shared';
 import { SocketService } from '../services/socket';
 import { WebRTCService } from '../services/webrtc';
+import CallInterface, { CallState as CallInterfaceState } from './CallInterface';
+import { TranscriptionResult } from '../services/types';
+import Header from './shared/Header.tsx';
+import CallInput from './shared/CallInput.tsx';
+import MyNumber from './shared/MyNumber.tsx';
+import StatusIndicator from './shared/StatusIndicator.tsx';
+import Instructions from './shared/Instructions.tsx';
+import Footer from './shared/Footer.tsx';
 
 type CallState = 'idle' | 'outgoing' | 'incoming' | 'connected';
 
@@ -36,6 +43,11 @@ const LandingPage: React.FC = () => {
   const callDurationIntervalRef = useRef<number | null>(null);
   const localAudioRef = useRef<HTMLAudioElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
+
+  const [showTranscription, setShowTranscription] = useState(false);
+  const [transcripts, setTranscripts] = useState<TranscriptionResult[]>([]);
+  const [isTranscriptionLoading, setIsTranscriptionLoading] = useState(false);
+  const [transcriptionError, setTranscriptionError] = useState<string>('');
 
   // Handle phone number input with filtering
   const handlePhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -303,13 +315,6 @@ const LandingPage: React.FC = () => {
     }
   };
 
-  // Format call duration as MM:SS
-  const formatCallDuration = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
-  };
-
   // Start call duration timer
   const startCallDurationTimer = () => {
     console.log('⏱️ Starting call duration timer');
@@ -470,6 +475,13 @@ const LandingPage: React.FC = () => {
 
     socketRef.current.on('call-declined', () => {
       console.log('📞 Call was declined');
+      
+      // Stop transcription if it's running
+      if (webrtcRef.current) {
+        console.log('🎤 Stopping transcription due to call declined');
+        webrtcRef.current.stopTranscriptionPublic();
+      }
+      
       setCallState('idle');
       setError('Call was declined');
       clearTimeout(callTimeoutRef.current!); // Clear connection timeout
@@ -477,6 +489,13 @@ const LandingPage: React.FC = () => {
 
     socketRef.current.on('call-ended', ({ fromCode }: { fromCode: string }) => {
       console.log(`📞 Call ended by ${fromCode}`);
+      
+      // Stop transcription if it's running
+      if (webrtcRef.current) {
+        console.log('🎤 Stopping transcription due to call ended by other party');
+        webrtcRef.current.stopTranscriptionPublic();
+      }
+      
       setCallState('idle');
       setError('Call ended by other party');
       clearTimeout(callTimeoutRef.current!); // Clear connection timeout
@@ -666,6 +685,76 @@ const LandingPage: React.FC = () => {
     }
   };
 
+  const toggleTranscription = async () => {
+    if (!showTranscription) {
+      // Starting transcription
+      if (!webrtcRef.current || !socketRef.current) {
+        console.error('WebRTC or Socket service not available');
+        setTranscriptionError('WebRTC or Socket service not available');
+        return;
+      }
+
+      // Check if we're in a call
+      if (callState !== 'connected') {
+        setTranscriptionError('Transcription is only available during active calls');
+        return;
+      }
+
+      setIsTranscriptionLoading(true);
+      setTranscriptionError('');
+
+      try {
+        // Generate a unique conversation ID
+        const conversationId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Enable transcription with the socket service
+        await webrtcRef.current.enableTranscription(conversationId, myNumber, socketRef.current);
+        
+        // Set up transcription callback
+        webrtcRef.current.onTranscription((result) => {
+          setTranscripts(prev => [...prev, result]);
+        });
+
+        // Set up error callback
+        webrtcRef.current.onTranscriptionError?.((error) => {
+          setTranscriptionError(error);
+        });
+
+        // Start transcription with the local stream
+        const localStream = webrtcRef.current.getLocalStream();
+        if (localStream && localStream.active) {
+          await webrtcRef.current.startTranscriptionPublic(localStream);
+          console.log('🎤 Transcription started successfully');
+        } else {
+          throw new Error('No active local stream available for transcription');
+        }
+      } catch (error) {
+        console.error('Failed to start transcription:', error);
+        setTranscriptionError(`Failed to start transcription: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setIsTranscriptionLoading(false);
+      }
+    } else {
+      // Stopping transcription
+      setIsTranscriptionLoading(true);
+      
+      try {
+        if (webrtcRef.current) {
+          webrtcRef.current.stopTranscriptionPublic();
+          setTranscriptionError('');
+          console.log('🎤 Transcription stopped');
+        }
+      } catch (error) {
+        console.error('Failed to stop transcription:', error);
+        setTranscriptionError('Failed to stop transcription');
+      } finally {
+        setIsTranscriptionLoading(false);
+      }
+    }
+
+    setShowTranscription(!showTranscription);
+  };
+
   const cleanup = () => {
     console.log('🧹 Cleaning up call services...');
     
@@ -803,9 +892,6 @@ const LandingPage: React.FC = () => {
     }
   };
 
-  // Get the current phone number validation status
-  const phoneValidation = validatePhoneNumber(friendNumber);
-
   // Helper function to update current call partner (both state and ref)
   const updateCurrentCallPartner = (partner: string) => {
     setCurrentCallPartner(partner);
@@ -816,63 +902,14 @@ const LandingPage: React.FC = () => {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="max-w-md mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-5xl font-bold text-gray-800 mb-3">🔮 Sybil</h1>
-          <p className="text-lg text-gray-600">
-            AI-powered voice calling platform
-          </p>
-        </div>
-
-        {/* Phone Interface Card */}
+        <Header />
         <div className="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
-          
-          {/* Call a Friend Section */}
-          <div className="mb-8">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              📞 Call a Number
-            </h2>
-            <div className="space-y-4">
-              <div>
-                <input
-                  type="text"
-                  value={friendNumber}
-                  onChange={handlePhoneNumberChange}
-                  onKeyUp={handlePhoneNumberKeyPress}
-                  placeholder="Enter phone number"
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-lg font-mono tracking-wider ${
-                    friendNumber.trim() && !phoneValidation.isValid 
-                      ? 'border-red-300 bg-red-50' 
-                      : friendNumber.trim() && phoneValidation.isValid 
-                        ? 'border-green-300 bg-green-50' 
-                        : 'border-gray-300'
-                  }`}
-                  maxLength={15}
-                />
-                {/* Phone number preview */}
-                {friendNumber.trim() && (
-                  <p className={`text-xs mt-2 text-center ${
-                    phoneValidation.isValid ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {phoneValidation.message}
-                  </p>
-                )}
-              </div>
-              <Button
-                onClick={handleCallFriend}
-                disabled={!friendNumber.trim() || !phoneValidation.isValid}
-                variant="primary"
-                size="large"
-                fullWidth
-                className="flex items-center justify-center gap-2"
-              >
-                <PhoneIcon className="w-5 h-5" />
-                Call Number
-              </Button>
-            </div>
-          </div>
-
-          {/* Divider */}
+          <CallInput
+            friendNumber={friendNumber}
+            onChange={handlePhoneNumberChange}
+            onKeyPress={handlePhoneNumberKeyPress}
+            onCall={handleCallFriend}
+          />
           <div className="relative my-8">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-gray-200"></div>
@@ -881,272 +918,40 @@ const LandingPage: React.FC = () => {
               <span className="px-4 bg-white text-gray-500">OR</span>
             </div>
           </div>
-
-          {/* My Number Section */}
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-              � My Number
-            </h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Your number (always available for calls):
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={isGeneratingNumber ? 'Generating...' : myNumber}
-                    readOnly
-                    className="flex-1 px-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-center text-lg font-mono tracking-wider font-semibold text-blue-600"
-                  />
-                  <button
-                    onClick={copyMyNumber}
-                    className="px-4 py-3 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg transition-colors"
-                    title="Copy number"
-                  >
-                    📋
-                  </button>
-                  <button
-                    onClick={refreshMyNumber}
-                    disabled={isGeneratingNumber}
-                    className="px-4 py-3 bg-gray-100 hover:bg-gray-200 border border-gray-300 rounded-lg transition-colors disabled:opacity-50"
-                    title="Generate new number"
-                  >
-                    🔄
-                  </button>
-                </div>
-              </div>
-              
-              {/* Status Indicator */}
-              <div className={`flex items-center justify-center p-3 rounded-lg border ${
-                isConnected 
-                  ? 'bg-green-50 border-green-200' 
-                  : 'bg-orange-50 border-orange-200'
-              }`}>
-                <div className={`w-2 h-2 rounded-full mr-2 ${
-                  isConnected 
-                    ? 'bg-green-500 animate-pulse' 
-                    : 'bg-orange-500'
-                }`}></div>
-                <span className={`text-sm font-medium ${
-                  isConnected 
-                    ? 'text-green-700' 
-                    : 'text-orange-700'
-                }`}>
-                  {isConnected 
-                    ? '📶 Available for calls' 
-                    : '⏳ Connecting...'}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Instructions */}
-          <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <p className="text-sm text-blue-700">
-              <strong>📱 How it works:</strong> Share your number with others and they can call you anytime. 
-              Just like a real phone!
-            </p>
-            <p className="text-xs text-blue-600 mt-2">
-              💡 <strong>Multi-tab friendly:</strong> Each browser tab automatically gets its own unique number
-            </p>
-          </div>
+          <MyNumber
+            myNumber={myNumber}
+            isGeneratingNumber={isGeneratingNumber}
+            onCopy={copyMyNumber}
+            onRefresh={refreshMyNumber}
+          />
+          <StatusIndicator isConnected={isConnected} />
+          <Instructions />
         </div>
-
+        <Footer />
         {/* Call Interface Overlay - shows different content based on call state */}
         {callState !== 'idle' && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100 max-w-md mx-4">
-              
-              {/* Connection Status */}
-              <div className="text-center mb-6">
-                <ConnectionStatus connectionState={
-                  callState === 'connected' ? 'connected' : 
-                  callState === 'outgoing' || callState === 'incoming' ? 'connecting' : 
-                  'disconnected'
-                } />
-              </div>
-
-              {/* Error Display */}
-              {error && (
-                <div className="mb-6 space-y-3">
-                  <ErrorMessage message={error} />
-                  
-                  {/* Show network quality info if we have connection stats */}
-                  {connectionStatsRef.current.connectionsAttempted > 0 && (
-                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm">
-                      <p className="font-semibold text-yellow-800 mb-2">🔍 Connection Diagnostics:</p>
-                      <div className="space-y-1 text-yellow-700">
-                        <p>• Attempts: {connectionStatsRef.current.connectionsAttempted}</p>
-                        <p>• Successful: {connectionStatsRef.current.connectionsSucceeded}</p>
-                        {connectionStatsRef.current.averageConnectionDuration > 0 && (
-                          <p>• Avg Duration: {Math.round(connectionStatsRef.current.averageConnectionDuration / 1000)}s</p>
-                        )}
-                        <p>• Quality: {connectionStatsRef.current.networkQuality}</p>
-                      </div>
-                      
-                      {/* Network-specific recommendations */}
-                      {connectionStatsRef.current.networkQuality === 'poor' && (
-                        <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700">
-                          <p className="font-semibold">💡 Quick Fix Suggestions:</p>
-                          <ul className="mt-1 space-y-1">
-                            <li>• Move closer to your WiFi router</li>
-                            <li>• Switch from WiFi to mobile data (or vice versa)</li>
-                            <li>• Check if other devices on your network are using bandwidth</li>
-                            <li>• Try calling again in a few minutes</li>
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  
-                  <Button
-                    onClick={recoverFromError}
-                    variant="secondary"
-                    size="small"
-                    className="mx-auto"
-                  >
-                    🔄 Try Again
-                  </Button>
-                </div>
-              )}
-
-              {/* Incoming Call Interface */}
-              {callState === 'incoming' && (
-                <div className="text-center space-y-6">
-                  <div className="flex items-center justify-center mb-4">
-                    <div className={`w-16 h-16 bg-green-100 rounded-full flex items-center justify-center ${isRinging ? 'animate-bounce' : ''}`}>
-                      <span className="text-3xl">📞</span>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-2xl font-bold text-gray-800 mb-2">
-                      {isRinging ? '📳 Incoming Call' : '📞 Incoming Call'}
-                    </h3>
-                    <p className="text-lg text-gray-600 mb-2">From:</p>
-                    <p className="text-xl font-mono font-bold text-blue-600 break-all">
-                      {currentCallPartner}
-                    </p>
-                    {isRinging && (
-                      <p className="text-sm text-gray-500 mt-2 animate-pulse">
-                        📳 Ring ring...
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="flex gap-4">
-                    <Button
-                      onClick={handleDeclineCall}
-                      variant="danger"
-                      size="large"
-                      fullWidth
-                      className="flex items-center justify-center gap-2"
-                    >
-                      ❌ Decline
-                    </Button>
-                    <Button
-                      onClick={handleAnswerCall}
-                      variant="success"
-                      size="large"
-                      fullWidth
-                      className="flex items-center justify-center gap-2"
-                    >
-                      ✅ Answer
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {/* Outgoing Call Interface */}
-              {callState === 'outgoing' && (
-                <div className="text-center space-y-6">
-                  <div className="flex items-center justify-center mb-4">
-                    <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center animate-pulse">
-                      <span className="text-3xl">📞</span>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-2xl font-bold text-gray-800 mb-2">📞 Calling...</h3>
-                    <p className="text-lg text-gray-600 mb-2">Calling:</p>
-                    <p className="text-xl font-mono font-bold text-blue-600 break-all">
-                      {currentCallPartner}
-                    </p>
-                    <p className="text-sm text-gray-500 mt-2 animate-pulse">
-                      Waiting for them to answer...
-                    </p>
-                  </div>
-
-                  <Button
-                    onClick={endCall}
-                    variant="secondary"
-                    size="large"
-                    fullWidth
-                    className="flex items-center justify-center gap-2"
-                  >
-                    ❌ Cancel Call
-                  </Button>
-                </div>
-              )}
-
-              {/* Active Call Interface */}
-              {callState === 'connected' && (
-                <div className="text-center space-y-6">
-                  <div className="flex items-center justify-center mb-4">
-                    <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
-                      <span className="text-3xl">🔊</span>
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <h3 className="text-2xl font-bold text-green-800 mb-2">🔊 Active Call</h3>
-                    <p className="text-lg text-gray-600 mb-2">Connected to:</p>
-                    <p className="text-xl font-mono font-bold text-green-600 break-all mb-3">
-                      {currentCallPartner}
-                    </p>
-                    {/* Call Duration */}
-                    <div className="inline-flex items-center px-3 py-1 bg-green-50 border border-green-200 rounded-full">
-                      <span className="text-sm font-mono text-green-700">
-                        ⏱️ {formatCallDuration(callDuration)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-4">
-                    <Button
-                      onClick={toggleMute}
-                      variant={isMuted ? "danger" : "secondary"}
-                      size="large"
-                      fullWidth
-                      className="flex items-center justify-center gap-2"
-                    >
-                      {isMuted ? '🔇 Unmute' : '🔊 Mute'}
-                    </Button>
-                    <Button
-                      onClick={endCall}
-                      variant="danger"
-                      size="large"
-                      fullWidth
-                      className="flex items-center justify-center gap-2"
-                    >
-                      📞 End Call
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+          <CallInterface
+            callState={callState as CallInterfaceState}
+            error={error}
+            isMuted={isMuted}
+            callDuration={callDuration}
+            currentCallPartner={currentCallPartner}
+            isRinging={isRinging}
+            onMute={toggleMute}
+            onEndCall={endCall}
+            onAnswer={handleAnswerCall}
+            onDecline={handleDeclineCall}
+            onRetry={recoverFromError}
+                                            showTranscription={showTranscription}
+                onToggleTranscription={toggleTranscription}
+                transcripts={transcripts}
+                isTranscriptionLoading={isTranscriptionLoading}
+                transcriptionError={transcriptionError}
+          />
         )}
-
         {/* Audio Elements */}
         <audio ref={localAudioRef} muted />
         <audio ref={remoteAudioRef} autoPlay />
-
-        {/* Footer */}
-        <div className="text-center mt-6 text-gray-500 text-sm">
-          🔮 Oracle Wisdom • 📞 Voice Calling • 🤖 AI Insights
-        </div>
       </div>
     </div>
   );

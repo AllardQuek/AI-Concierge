@@ -1,4 +1,7 @@
 // WebRTC Service for handling peer-to-peer voice connections
+import { TranscriptionResult } from './types';
+import { AzureTranscriptionService } from './azure-transcription';
+
 export class WebRTCService {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
@@ -8,6 +11,14 @@ export class WebRTCService {
   private onRemoteStreamCallback?: (stream: MediaStream) => void;
   private onConnectionStateChangeCallback?: (state: string) => void;
   private userInteractionOccurred: boolean = false;
+  
+  // Transcription service
+  private azureTranscriptionService: AzureTranscriptionService | null = null;
+  private conversationId: string | null = null;
+  private participantId: string | null = null;
+
+  private onTranscriptionCallback?: (result: TranscriptionResult) => void;
+  private onTranscriptionErrorCallback?: (error: string) => void;
 
   // ICE servers configuration for NAT traversal (enhanced for mobile)
   private iceServers = [
@@ -213,6 +224,11 @@ export class WebRTCService {
           console.log('WebRTC: Adding local track to peer connection:', track.kind);
           this.peerConnection!.addTrack(track, stream);
         });
+      }
+      
+      // Start transcription if enabled
+      if (this.conversationId && this.participantId) {
+        await this.startTranscription(stream);
       }
       
       return stream;
@@ -605,6 +621,9 @@ export class WebRTCService {
   cleanup(): void {
     console.log('WebRTC: Starting cleanup...');
     
+    // Stop transcription
+    this.stopTranscription();
+    
     // Clear any pending operations
     if (this.peerConnection) {
       console.log('WebRTC: Cleanup - signaling state:', this.peerConnection.signalingState);
@@ -646,6 +665,89 @@ export class WebRTCService {
     this.remoteStream = null;
     
     console.log('WebRTC: Cleanup complete');
+  }
+
+  // Transcription methods
+  async enableTranscription(conversationId: string, participantId: string, existingSocket?: any): Promise<void> {
+    this.conversationId = conversationId;
+    this.participantId = participantId;
+    
+
+    
+    // Initialize Azure transcription service with the socket
+    if (existingSocket) {
+      this.azureTranscriptionService = new AzureTranscriptionService(existingSocket);
+      
+      // Set up transcription callbacks
+      this.azureTranscriptionService.onTranscription((result: TranscriptionResult) => {
+        if (this.onTranscriptionCallback) {
+          this.onTranscriptionCallback(result);
+        }
+      });
+      
+      this.azureTranscriptionService.onError((error: string) => {
+        console.error('Azure transcription error:', error);
+        if (this.onTranscriptionErrorCallback) {
+          this.onTranscriptionErrorCallback(error);
+        }
+      });
+    } else {
+      console.warn('🎤 No socket provided for transcription - transcription will not be available');
+    }
+    
+    console.log('🎤 Transcription enabled for conversation:', conversationId, 'participant:', participantId);
+  }
+
+  private async startTranscription(stream: MediaStream): Promise<void> {
+    if (!this.conversationId || !this.participantId) {
+      return;
+    }
+    
+    try {
+      if (this.azureTranscriptionService) {
+        // Use Azure transcription service with error handling
+        await this.azureTranscriptionService.startTranscription(
+          stream,
+          this.conversationId,
+          this.participantId
+        );
+        
+        console.log('🎤 Azure transcription started');
+      } else {
+        console.warn('🎤 No transcription service available - transcription not started');
+      }
+    } catch (error) {
+      console.error('Failed to start transcription:', error);
+    }
+  }
+
+  private   stopTranscription(): void {
+    console.log('🎤 WebRTC: Stopping transcription...');
+    if (this.azureTranscriptionService) {
+      this.azureTranscriptionService.stopTranscription();
+      this.azureTranscriptionService = null;
+      console.log('🎤 WebRTC: Transcription service stopped and nulled');
+    } else {
+      console.log('🎤 WebRTC: No transcription service to stop');
+    }
+  }
+
+  onTranscription(callback: (result: TranscriptionResult) => void): void {
+    this.onTranscriptionCallback = callback;
+  }
+
+  onTranscriptionError(callback: (error: string) => void): void {
+    this.onTranscriptionErrorCallback = callback;
+  }
+
+  // Public method to start transcription
+  async startTranscriptionPublic(stream: MediaStream): Promise<void> {
+    return this.startTranscription(stream);
+  }
+
+  // Public method to stop transcription
+  stopTranscriptionPublic(): void {
+    this.stopTranscription();
   }
 
   // Get connection state

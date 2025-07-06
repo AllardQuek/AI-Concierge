@@ -16,6 +16,12 @@ export interface SocketEvents {
   'answer': (data: { answer: RTCSessionDescriptionInit; fromUserId: string }) => void;
   'ice-candidate': (data: { candidate: RTCIceCandidateInit; fromUserId: string }) => void;
   
+  // Azure transcription events
+  'transcript-partial': (data: { text: string }) => void;
+  'transcript-final': (data: { text: string }) => void;
+  'transcription-error': (data: { message: string }) => void;
+  'transcription-ended': () => void;
+  
   // Connection events
   'connect': () => void;
   'disconnect': (reason: string) => void;
@@ -184,6 +190,28 @@ export class SocketService {
     }
   }
 
+  // Azure transcription methods
+  startTranscription(): void {
+    if (this.socket) {
+      this.socket.emit('start-transcription');
+    }
+  }
+
+  sendAudioChunk(data: Uint8Array, durationSec?: number): void {
+    if (this.socket) {
+      console.log(`🔊 SocketService: Emitting audio-chunk event: ${data.length} bytes, ${durationSec}s`);
+      this.socket.emit('audio-chunk', { data, durationSec });
+    } else {
+      console.warn('🔊 SocketService: No socket available to send audio chunk');
+    }
+  }
+
+  stopTranscription(): void {
+    if (this.socket) {
+      this.socket.emit('stop-transcription');
+    }
+  }
+
   // Generic emit method for new events
   emit(event: string, data?: any): void {
     if (this.socket) {
@@ -217,5 +245,10 @@ export class SocketService {
   // Get socket ID
   getSocketId(): string | undefined {
     return this.socket?.id;
+  }
+
+  // Get the underlying socket for sharing with other services
+  getSocket(): Socket | null {
+    return this.socket;
   }
 }
