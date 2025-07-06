@@ -3,7 +3,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
-const TranscriptionService = require('./transcription-service');
+const { attachAzureTranscriptionService, getConversationTranscripts, getAllConversationSummaries } = require('./azure-transcription-service');
 
 const app = express();
 const server = http.createServer(app);
@@ -37,8 +37,10 @@ const io = socketIo(server, {
   transports: ['websocket', 'polling']
 });
 
-// Initialize transcription service
-const transcriptionService = new TranscriptionService(io);
+// Initialize Azure transcription service (includes storage and conversation management)
+attachAzureTranscriptionService(io).catch(error => {
+  console.error('Failed to initialize Azure transcription service:', error);
+});
 
 // Store peer-to-peer connections globally
 const peerCodeMap = new Map(); // Map<userCode, socketId>
@@ -83,7 +85,7 @@ app.get('/debug', (req, res) => {
 app.get('/api/transcripts/:conversationId', async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const transcripts = await transcriptionService.getConversationTranscripts(conversationId);
+    const transcripts = await getConversationTranscripts(conversationId);
     res.json(transcripts);
   } catch (error) {
     console.error('Error fetching transcripts:', error);
@@ -93,7 +95,7 @@ app.get('/api/transcripts/:conversationId', async (req, res) => {
 
 app.get('/api/transcripts', async (req, res) => {
   try {
-    const summaries = await transcriptionService.getAllConversationSummaries();
+    const summaries = await getAllConversationSummaries();
     res.json(summaries);
   } catch (error) {
     console.error('Error fetching conversation summaries:', error);
@@ -406,18 +408,9 @@ io.on('connection', (socket) => {
 
   // ========== TRANSCRIPTION HANDLERS ==========
   
-  // Handle transcription events
-  socket.on('transcription-audio-chunk', (data) => {
-    transcriptionService.handleTranscriptionEvent(socket, 'audio-chunk', data);
-  });
-
-  socket.on('transcription-start-conversation', (data) => {
-    transcriptionService.handleTranscriptionEvent(socket, 'start-conversation', data);
-  });
-
-  socket.on('transcription-end-conversation', (data) => {
-    transcriptionService.handleTranscriptionEvent(socket, 'end-conversation', data);
-  });
+  // Azure transcription events are handled in azure-transcription-service.js
+  // The service automatically handles: start-transcription, audio-chunk, stop-transcription
+  // start-conversation, end-conversation events
 });
 
 const PORT = process.env.PORT || 3001;
