@@ -218,4 +218,9 @@ export class SocketService {
   getSocketId(): string | undefined {
     return this.socket?.id;
   }
+
+  // Get the underlying socket for sharing with other services
+  getSocket(): Socket | null {
+    return this.socket;
+  }
 }

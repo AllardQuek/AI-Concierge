@@ -1,4 +1,6 @@
 // WebRTC Service for handling peer-to-peer voice connections
+import { TranscriptionService, TranscriptionResult } from './transcription';
+
 export class WebRTCService {
   private peerConnection: RTCPeerConnection | null = null;
   private localStream: MediaStream | null = null;
@@ -8,6 +10,13 @@ export class WebRTCService {
   private onRemoteStreamCallback?: (stream: MediaStream) => void;
   private onConnectionStateChangeCallback?: (state: string) => void;
   private userInteractionOccurred: boolean = false;
+  
+  // Transcription service
+  private transcriptionService: TranscriptionService | null = null;
+  private conversationId: string | null = null;
+  private participantId: string | null = null;
+  private existingSocket: any = null;
+  private onTranscriptionCallback?: (result: TranscriptionResult) => void;
 
   // ICE servers configuration for NAT traversal (enhanced for mobile)
   private iceServers = [
@@ -213,6 +222,11 @@ export class WebRTCService {
           console.log('WebRTC: Adding local track to peer connection:', track.kind);
           this.peerConnection!.addTrack(track, stream);
         });
+      }
+      
+      // Start transcription if enabled
+      if (this.conversationId && this.participantId) {
+        await this.startTranscription(stream);
       }
       
       return stream;
@@ -605,6 +619,9 @@ export class WebRTCService {
   cleanup(): void {
     console.log('WebRTC: Starting cleanup...');
     
+    // Stop transcription
+    this.stopTranscription();
+    
     // Clear any pending operations
     if (this.peerConnection) {
       console.log('WebRTC: Cleanup - signaling state:', this.peerConnection.signalingState);
@@ -646,6 +663,60 @@ export class WebRTCService {
     this.remoteStream = null;
     
     console.log('WebRTC: Cleanup complete');
+  }
+
+  // Transcription methods
+  async enableTranscription(conversationId: string, participantId: string, existingSocket?: any): Promise<void> {
+    this.conversationId = conversationId;
+    this.participantId = participantId;
+    
+    // Initialize transcription service
+    this.transcriptionService = new TranscriptionService();
+    
+    // Set up transcription callbacks
+    this.transcriptionService.onTranscription((result) => {
+      if (this.onTranscriptionCallback) {
+        this.onTranscriptionCallback(result);
+      }
+    });
+    
+    this.transcriptionService.onError((error) => {
+      console.error('Transcription error:', error);
+    });
+    
+    // Store the existing socket for use when starting transcription
+    this.existingSocket = existingSocket;
+    
+    console.log('🎤 Transcription enabled for conversation:', conversationId, 'participant:', participantId);
+  }
+
+  private async startTranscription(stream: MediaStream): Promise<void> {
+    if (!this.transcriptionService || !this.conversationId || !this.participantId) {
+      return;
+    }
+    
+    try {
+      await this.transcriptionService.startTranscription(
+        stream,
+        this.conversationId,
+        this.participantId,
+        this.existingSocket
+      );
+      console.log('🎤 Transcription started');
+    } catch (error) {
+      console.error('Failed to start transcription:', error);
+    }
+  }
+
+  private stopTranscription(): void {
+    if (this.transcriptionService) {
+      this.transcriptionService.stopTranscription();
+      this.transcriptionService = null;
+    }
+  }
+
+  onTranscription(callback: (result: TranscriptionResult) => void): void {
+    this.onTranscriptionCallback = callback;
   }
 
   // Get connection state

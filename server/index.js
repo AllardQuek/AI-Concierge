@@ -3,6 +3,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const TranscriptionService = require('./transcription-service');
 
 const app = express();
 const server = http.createServer(app);
@@ -35,6 +36,9 @@ const io = socketIo(server, {
   allowUpgrades: true,
   transports: ['websocket', 'polling']
 });
+
+// Initialize transcription service
+const transcriptionService = new TranscriptionService(io);
 
 // Store peer-to-peer connections globally
 const peerCodeMap = new Map(); // Map<userCode, socketId>
@@ -73,6 +77,28 @@ app.get('/debug', (req, res) => {
     memoryUsage: process.memoryUsage(),
     environment: process.env.NODE_ENV || 'development'
   });
+});
+
+// Transcription API endpoints
+app.get('/api/transcripts/:conversationId', async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const transcripts = await transcriptionService.getConversationTranscripts(conversationId);
+    res.json(transcripts);
+  } catch (error) {
+    console.error('Error fetching transcripts:', error);
+    res.status(500).json({ error: 'Failed to fetch transcripts' });
+  }
+});
+
+app.get('/api/transcripts', async (req, res) => {
+  try {
+    const summaries = await transcriptionService.getAllConversationSummaries();
+    res.json(summaries);
+  } catch (error) {
+    console.error('Error fetching conversation summaries:', error);
+    res.status(500).json({ error: 'Failed to fetch conversation summaries' });
+  }
 });
 
 // Enhanced debug endpoint with detailed socket information
@@ -376,6 +402,21 @@ io.on('connection', (socket) => {
       users.delete(socket.id);
       socket.emit('left-room');
     }
+  });
+
+  // ========== TRANSCRIPTION HANDLERS ==========
+  
+  // Handle transcription events
+  socket.on('transcription-audio-chunk', (data) => {
+    transcriptionService.handleTranscriptionEvent(socket, 'audio-chunk', data);
+  });
+
+  socket.on('transcription-start-conversation', (data) => {
+    transcriptionService.handleTranscriptionEvent(socket, 'start-conversation', data);
+  });
+
+  socket.on('transcription-end-conversation', (data) => {
+    transcriptionService.handleTranscriptionEvent(socket, 'end-conversation', data);
   });
 });
 
