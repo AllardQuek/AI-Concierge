@@ -26,8 +26,23 @@ const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({ isVisible, onCl
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
-  const getSpeakerColor = (speaker: 'A' | 'B'): string => {
-    return speaker === 'A' ? 'text-blue-600' : 'text-green-600';
+  const getSpeakerColor = (speaker: string): string => {
+    // Use a hash of the speaker string to get consistent colors
+    const hash = speaker.split('').reduce((a, b) => {
+      a = ((a << 5) - a) + b.charCodeAt(0);
+      return a & a;
+    }, 0);
+    
+    const colors = [
+      'text-blue-600',
+      'text-green-600', 
+      'text-purple-600',
+      'text-orange-600',
+      'text-red-600',
+      'text-indigo-600'
+    ];
+    
+    return colors[Math.abs(hash) % colors.length];
   };
 
   const getConfidenceColor = (confidence: number): string => {
@@ -88,7 +103,7 @@ const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({ isVisible, onCl
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">
                       <span className={`font-semibold ${getSpeakerColor(transcript.speaker)}`}>
-                        Speaker {transcript.speaker}
+                        {transcript.speaker}
                       </span>
                       <span className="text-xs text-gray-500">
                         {formatTimestamp(transcript.timestamp)}
@@ -115,14 +130,7 @@ const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({ isVisible, onCl
         <div className="p-4 border-t border-gray-200 bg-gray-50">
           <div className="flex items-center justify-between text-sm text-gray-600">
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <span>Speaker A</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span>Speaker B</span>
-              </div>
+              {/* Dynamic speaker labels will be shown based on actual participants */}
             </div>
             <div className="text-right">
               <p>{transcripts.length} transcript{transcripts.length !== 1 ? 's' : ''}</p>
@@ -187,7 +195,7 @@ const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({ isVisible, onCl
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">
                       <span className={`font-semibold ${getSpeakerColor(transcript.speaker)}`}>
-                        Speaker {transcript.speaker}
+                        {transcript.speaker}
                       </span>
                       <span className="text-xs text-gray-500">
                         {formatTimestamp(transcript.timestamp)}
@@ -215,14 +223,7 @@ const TranscriptionPanel: React.FC<TranscriptionPanelProps> = ({ isVisible, onCl
         <div className="p-4 border-t border-gray-200 bg-gray-50">
           <div className="flex items-center justify-between text-sm text-gray-600">
             <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-                <span>Speaker A</span>
-              </div>
-              <div className="flex items-center space-x-1">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span>Speaker B</span>
-              </div>
+              {/* Dynamic speaker labels will be shown based on actual participants */}
             </div>
             <div className="text-right">
               <p>{transcripts.length} transcript{transcripts.length !== 1 ? 's' : ''}</p>

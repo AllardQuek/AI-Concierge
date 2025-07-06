@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { PhoneIcon, Button, ConnectionStatus, ErrorMessage } from './shared';
 import { SocketService } from '../services/socket';
 import { WebRTCService } from '../services/webrtc';
 import CallInterface, { CallState as CallInterfaceState } from './CallInterface';
 import { TranscriptionResult } from '../services/transcription';
-import Header from './shared/Header';
-import CallInput from './shared/CallInput';
-import MyNumber from './shared/MyNumber';
-import StatusIndicator from './shared/StatusIndicator';
-import Instructions from './shared/Instructions';
-import Footer from './shared/Footer';
+import Header from './shared/Header.tsx';
+import CallInput from './shared/CallInput.tsx';
+import MyNumber from './shared/MyNumber.tsx';
+import StatusIndicator from './shared/StatusIndicator.tsx';
+import Instructions from './shared/Instructions.tsx';
+import Footer from './shared/Footer.tsx';
 
 type CallState = 'idle' | 'outgoing' | 'incoming' | 'connected';
 
@@ -47,6 +46,8 @@ const LandingPage: React.FC = () => {
 
   const [showTranscription, setShowTranscription] = useState(false);
   const [transcripts, setTranscripts] = useState<TranscriptionResult[]>([]);
+  const [isTranscriptionLoading, setIsTranscriptionLoading] = useState(false);
+  const [transcriptionError, setTranscriptionError] = useState<string>('');
 
   // Handle phone number input with filtering
   const handlePhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -312,13 +313,6 @@ const LandingPage: React.FC = () => {
     if (navigator.vibrate) {
       navigator.vibrate(0); // Stop vibration
     }
-  };
-
-  // Format call duration as MM:SS
-  const formatCallDuration = (seconds: number): string => {
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
   };
 
   // Start call duration timer
@@ -677,6 +671,76 @@ const LandingPage: React.FC = () => {
     }
   };
 
+  const toggleTranscription = async () => {
+    if (!showTranscription) {
+      // Starting transcription
+      if (!webrtcRef.current || !socketRef.current) {
+        console.error('WebRTC or Socket service not available');
+        setTranscriptionError('WebRTC or Socket service not available');
+        return;
+      }
+
+      // Check if we're in a call
+      if (callState !== 'connected') {
+        setTranscriptionError('Transcription is only available during active calls');
+        return;
+      }
+
+      setIsTranscriptionLoading(true);
+      setTranscriptionError('');
+
+      try {
+        // Generate a unique conversation ID
+        const conversationId = `call-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
+        // Enable transcription with the socket service
+        await webrtcRef.current.enableTranscription(conversationId, myNumber, socketRef.current);
+        
+        // Set up transcription callback
+        webrtcRef.current.onTranscription((result) => {
+          setTranscripts(prev => [...prev, result]);
+        });
+
+        // Set up error callback
+        webrtcRef.current.onTranscriptionError?.((error) => {
+          setTranscriptionError(error);
+        });
+
+        // Start transcription with the local stream
+        const localStream = webrtcRef.current.getLocalStream();
+        if (localStream && localStream.active) {
+          await webrtcRef.current.startTranscriptionPublic(localStream);
+          console.log('🎤 Transcription started successfully');
+        } else {
+          throw new Error('No active local stream available for transcription');
+        }
+      } catch (error) {
+        console.error('Failed to start transcription:', error);
+        setTranscriptionError(`Failed to start transcription: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      } finally {
+        setIsTranscriptionLoading(false);
+      }
+    } else {
+      // Stopping transcription
+      setIsTranscriptionLoading(true);
+      
+      try {
+        if (webrtcRef.current) {
+          webrtcRef.current.stopTranscriptionPublic();
+          setTranscriptionError('');
+          console.log('🎤 Transcription stopped');
+        }
+      } catch (error) {
+        console.error('Failed to stop transcription:', error);
+        setTranscriptionError('Failed to stop transcription');
+      } finally {
+        setIsTranscriptionLoading(false);
+      }
+    }
+
+    setShowTranscription(!showTranscription);
+  };
+
   const cleanup = () => {
     console.log('🧹 Cleaning up call services...');
     
@@ -814,9 +878,6 @@ const LandingPage: React.FC = () => {
     }
   };
 
-  // Get the current phone number validation status
-  const phoneValidation = validatePhoneNumber(friendNumber);
-
   // Helper function to update current call partner (both state and ref)
   const updateCurrentCallPartner = (partner: string) => {
     setCurrentCallPartner(partner);
@@ -867,9 +928,11 @@ const LandingPage: React.FC = () => {
             onAnswer={handleAnswerCall}
             onDecline={handleDeclineCall}
             onRetry={recoverFromError}
-            showTranscription={showTranscription}
-            onToggleTranscription={() => setShowTranscription((v) => !v)}
-            transcripts={transcripts}
+                                            showTranscription={showTranscription}
+                onToggleTranscription={toggleTranscription}
+                transcripts={transcripts}
+                isTranscriptionLoading={isTranscriptionLoading}
+                transcriptionError={transcriptionError}
           />
         )}
         {/* Audio Elements */}

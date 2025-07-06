@@ -1,5 +1,6 @@
 // WebRTC Service for handling peer-to-peer voice connections
 import { TranscriptionService, TranscriptionResult } from './transcription';
+import { AzureTranscriptionService } from './azure-transcription';
 
 export class WebRTCService {
   private peerConnection: RTCPeerConnection | null = null;
@@ -13,10 +14,12 @@ export class WebRTCService {
   
   // Transcription service
   private transcriptionService: TranscriptionService | null = null;
+  private azureTranscriptionService: AzureTranscriptionService | null = null;
   private conversationId: string | null = null;
   private participantId: string | null = null;
   private existingSocket: any = null;
   private onTranscriptionCallback?: (result: TranscriptionResult) => void;
+  private onTranscriptionErrorCallback?: (error: string) => void;
 
   // ICE servers configuration for NAT traversal (enhanced for mobile)
   private iceServers = [
@@ -670,46 +673,90 @@ export class WebRTCService {
     this.conversationId = conversationId;
     this.participantId = participantId;
     
-    // Initialize transcription service
-    this.transcriptionService = new TranscriptionService();
-    
-    // Set up transcription callbacks
-    this.transcriptionService.onTranscription((result) => {
-      if (this.onTranscriptionCallback) {
-        this.onTranscriptionCallback(result);
-      }
-    });
-    
-    this.transcriptionService.onError((error) => {
-      console.error('Transcription error:', error);
-    });
-    
     // Store the existing socket for use when starting transcription
     this.existingSocket = existingSocket;
+    
+    // Initialize Azure transcription service with the socket
+    if (existingSocket) {
+      this.azureTranscriptionService = new AzureTranscriptionService(existingSocket);
+      
+      // Set up transcription callbacks
+      this.azureTranscriptionService.onTranscription((result) => {
+        if (this.onTranscriptionCallback) {
+          this.onTranscriptionCallback(result);
+        }
+      });
+      
+      this.azureTranscriptionService.onError((error) => {
+        console.error('Azure transcription error:', error);
+      });
+    } else {
+      // Fallback to old transcription service if no socket provided
+      this.transcriptionService = new TranscriptionService();
+      
+      this.transcriptionService.onTranscription((result) => {
+        if (this.onTranscriptionCallback) {
+          this.onTranscriptionCallback(result);
+        }
+      });
+      
+      this.transcriptionService.onError((error) => {
+        console.error('Transcription error:', error);
+      });
+    }
     
     console.log('🎤 Transcription enabled for conversation:', conversationId, 'participant:', participantId);
   }
 
   private async startTranscription(stream: MediaStream): Promise<void> {
-    if (!this.transcriptionService || !this.conversationId || !this.participantId) {
+    if (!this.conversationId || !this.participantId) {
       return;
     }
     
     try {
-      await this.transcriptionService.startTranscription(
-        stream,
-        this.conversationId,
-        this.participantId,
-        this.existingSocket
-      );
-      console.log('🎤 Transcription started');
+      if (this.azureTranscriptionService) {
+        // Use Azure transcription service with error handling
+        await this.azureTranscriptionService.startTranscription(
+          stream,
+          this.conversationId,
+          this.participantId
+        );
+        
+        // Wire up error callbacks
+        this.azureTranscriptionService.onError((error: string) => {
+          console.error('WebRTC: Azure transcription error:', error);
+          if (this.onTranscriptionErrorCallback) {
+            this.onTranscriptionErrorCallback(error);
+          }
+        });
+        
+        this.azureTranscriptionService.onTranscription((transcript: TranscriptionResult) => {
+          if (this.onTranscriptionCallback) {
+            this.onTranscriptionCallback(transcript);
+          }
+        });
+        
+        console.log('🎤 Azure transcription started');
+      } else if (this.transcriptionService) {
+        // Fallback to old transcription service
+        await this.transcriptionService.startTranscription(
+          stream,
+          this.conversationId,
+          this.participantId,
+          this.existingSocket
+        );
+        console.log('🎤 Fallback transcription started');
+      }
     } catch (error) {
       console.error('Failed to start transcription:', error);
     }
   }
 
   private stopTranscription(): void {
-    if (this.transcriptionService) {
+    if (this.azureTranscriptionService) {
+      this.azureTranscriptionService.stopTranscription();
+      this.azureTranscriptionService = null;
+    } else if (this.transcriptionService) {
       this.transcriptionService.stopTranscription();
       this.transcriptionService = null;
     }
@@ -717,6 +764,20 @@ export class WebRTCService {
 
   onTranscription(callback: (result: TranscriptionResult) => void): void {
     this.onTranscriptionCallback = callback;
+  }
+
+  onTranscriptionError(callback: (error: string) => void): void {
+    this.onTranscriptionErrorCallback = callback;
+  }
+
+  // Public method to start transcription
+  async startTranscriptionPublic(stream: MediaStream): Promise<void> {
+    return this.startTranscription(stream);
+  }
+
+  // Public method to stop transcription
+  stopTranscriptionPublic(): void {
+    this.stopTranscription();
   }
 
   // Get connection state
