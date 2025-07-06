@@ -67,6 +67,14 @@ async function attachAzureTranscriptionService(io) {
       try {
         const speechConfig = SpeechConfig.fromSubscription(AZURE_SPEECH_KEY, AZURE_SPEECH_REGION);
         speechConfig.speechRecognitionLanguage = 'en-US';
+        
+        // Optimize for real-time 16-bit PCM audio
+        speechConfig.setProperty(sdk.PropertyId.SpeechServiceConnection_EndSilenceTimeoutMs, "1000");
+        speechConfig.setProperty(sdk.PropertyId.SpeechServiceConnection_InitialSilenceTimeoutMs, "5000");
+        speechConfig.setProperty(sdk.PropertyId.Speech_SegmentationSilenceTimeoutMs, "1000");
+        
+        // Enable detailed logging for debugging
+        speechConfig.setProperty(sdk.PropertyId.SpeechServiceConnection_LogFilename, "azure-speech.log");
       // Use push stream for real-time audio
       const sdk = require('microsoft-cognitiveservices-speech-sdk');
       const pushStream = sdk.AudioInputStream.createPushStream();
@@ -145,7 +153,7 @@ async function attachAzureTranscriptionService(io) {
       const durationSec = data.durationSec || 0.02;
       
       // Always log audio reception for debugging (even without Azure session)
-      console.log(`🔊 Received audio chunk from ${socket.id} (${audioData.length} bytes, ${durationSec}s)`);
+      console.log(`🔊 Received audio chunk from ${socket.id} (${audioData.length} bytes, ${durationSec}s, format: 16-bit PCM)`);
       
       const session = sessions[socket.id];
       if (!session) {

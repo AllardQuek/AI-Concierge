@@ -229,17 +229,20 @@ export class AzureTranscriptionService {
           console.log('🔊 Received message from AudioWorklet:', event.data.type);
           if (event.data.type === 'audio-data' && this.isRecording) {
             const { data, duration } = event.data;
-            console.log(`🔊 Processing audio data: ${data.length} samples, duration: ${duration}s`);
+            console.log(`🔊 Processing audio data: ${data.length} samples, duration: ${duration}s, converting to 16-bit PCM`);
             
-            // Convert Float32Array to Uint8Array for sending to server
-            const audioData = new Uint8Array(data.length);
+            // Convert Float32Array to 16-bit PCM for Azure Speech-to-Text
+            const int16Data = new Int16Array(data.length);
             for (let i = 0; i < data.length; i++) {
-              audioData[i] = Math.max(-1, Math.min(1, data[i])) * 127 + 128;
+              int16Data[i] = Math.max(-32768, Math.min(32767, data[i] * 32767));
             }
+            
+            // Convert Int16Array to Uint8Array for transmission
+            const audioData = new Uint8Array(int16Data.buffer);
 
             // Send audio chunk to server regardless of fallback mode
             if (this.socket) {
-              console.log(`🔊 Sending audio chunk (AudioWorklet): ${audioData.length} bytes, duration: ${duration}s`);
+              console.log(`🔊 Sending audio chunk (AudioWorklet): ${audioData.length} bytes, duration: ${duration}s, 16-bit PCM format`);
               this.socket.sendAudioChunk(audioData, duration);
               
               // Log in fallback mode for debugging
@@ -294,17 +297,20 @@ export class AzureTranscriptionService {
 
       const inputBuffer = event.inputBuffer;
       const inputData = inputBuffer.getChannelData(0);
-      console.log(`🔊 ScriptProcessor: Processing ${inputData.length} samples, duration: ${inputBuffer.duration}s`);
+      console.log(`🔊 ScriptProcessor: Processing ${inputData.length} samples, duration: ${inputBuffer.duration}s, converting to 16-bit PCM`);
       
-      // Convert to Uint8Array for sending to server
-      const audioData = new Uint8Array(inputData.length);
+      // Convert to 16-bit PCM for Azure Speech-to-Text
+      const int16Data = new Int16Array(inputData.length);
       for (let i = 0; i < inputData.length; i++) {
-        audioData[i] = Math.max(-1, Math.min(1, inputData[i])) * 127 + 128;
+        int16Data[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32767));
       }
+      
+      // Convert Int16Array to Uint8Array for transmission
+      const audioData = new Uint8Array(int16Data.buffer);
 
       // Send audio chunk to server regardless of fallback mode
       if (this.socket) {
-        console.log(`🔊 Sending audio chunk (ScriptProcessor): ${audioData.length} bytes, duration: ${inputBuffer.duration}s`);
+        console.log(`🔊 Sending audio chunk (ScriptProcessor): ${audioData.length} bytes, duration: ${inputBuffer.duration}s, 16-bit PCM format`);
         this.socket.sendAudioChunk(audioData, inputBuffer.duration);
         
         // Log in fallback mode for debugging
