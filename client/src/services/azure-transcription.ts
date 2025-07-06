@@ -42,7 +42,7 @@ export class AzureTranscriptionService {
     if (!text.trim()) return;
 
     const result: TranscriptionResult = {
-      id: `azure-partial-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `azure-partial-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
       text: text,
       speaker: this.participantId || 'Unknown', // Use actual participant ID/phone number
       timestamp: Date.now(),
@@ -59,7 +59,7 @@ export class AzureTranscriptionService {
     if (!text.trim()) return;
 
     const result: TranscriptionResult = {
-      id: `azure-final-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: `azure-final-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
       text: text,
       speaker: this.participantId || 'Unknown', // Use actual participant ID/phone number
       timestamp: Date.now(),
@@ -91,12 +91,12 @@ export class AzureTranscriptionService {
     if (this.fallbackMode) return;
     
     this.fallbackMode = true;
-    console.log('🔊 Switching to fallback transcription mode');
+    console.log('🔊 Switching to fallback transcription mode - audio will still be sent to server');
     
     // Send a fallback transcript to indicate the system is working
     const fallbackResult: TranscriptionResult = {
-      id: `fallback-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      text: "Transcription service is currently unavailable. Please check your Azure credentials or try again later.",
+      id: `fallback-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+      text: "Audio is being captured and sent to server. Azure transcription is not configured - please set up credentials for real-time transcription.",
       speaker: this.participantId || 'Unknown',
       timestamp: Date.now(),
       confidence: 1.0,
@@ -113,10 +113,10 @@ export class AzureTranscriptionService {
 
   private startFallbackMessages(): void {
     const fallbackMessages = [
-      "Transcription service is in fallback mode.",
+      "Audio is being captured and sent to server.",
       "Azure Speech-to-Text is not configured.",
-      "Please set up your Azure credentials to enable transcription.",
-      "You can still make calls without transcription."
+      "Please set up your Azure credentials to enable real-time transcription.",
+      "You can still make calls - audio pipeline is working."
     ];
 
     let messageIndex = 0;
@@ -127,7 +127,7 @@ export class AzureTranscriptionService {
       }
 
       const fallbackResult: TranscriptionResult = {
-        id: `fallback-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: `fallback-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         text: fallbackMessages[messageIndex % fallbackMessages.length],
         speaker: this.participantId || 'Unknown',
         timestamp: Date.now(),
@@ -188,10 +188,11 @@ export class AzureTranscriptionService {
       
       const source = this.audioContext.createMediaStreamSource(audioStream);
       
-      // Create a script processor to capture audio data
-      this.audioProcessor = this.audioContext.createScriptProcessor(4096, 1, 1);
+      // Use ScriptProcessorNode for now (AudioWorklet requires more complex setup)
+      // TODO: Migrate to AudioWorkletNode when we have time for proper implementation
+      this.audioProcessor = this.audioContext.createScriptProcessor(4096, 1, 1) as any;
       
-      this.audioProcessor.onaudioprocess = (event) => {
+      (this.audioProcessor as any).onaudioprocess = (event: any) => {
         if (!this.isRecording) return;
 
         const inputBuffer = event.inputBuffer;
@@ -203,14 +204,21 @@ export class AzureTranscriptionService {
           audioData[i] = Math.max(-1, Math.min(1, inputData[i])) * 127 + 128;
         }
 
-        // Send audio chunk to Azure service
-        if (this.socket && !this.fallbackMode) {
+        // Send audio chunk to server regardless of fallback mode
+        if (this.socket) {
           this.socket.sendAudioChunk(audioData, inputBuffer.duration);
+          
+          // Log in fallback mode for debugging
+          if (this.fallbackMode) {
+            console.log('🔊 Audio sent to server (fallback mode - Azure not configured)');
+          }
         }
       };
 
-      source.connect(this.audioProcessor);
-      this.audioProcessor.connect(this.audioContext.destination);
+      if (this.audioProcessor) {
+        source.connect(this.audioProcessor);
+        this.audioProcessor.connect(this.audioContext.destination);
+      }
       
       console.log('🔊 Audio processing pipeline set up');
     } catch (error) {

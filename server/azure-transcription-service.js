@@ -79,7 +79,7 @@ async function attachAzureTranscriptionService(io) {
           
           // Create transcript result
           const transcript = {
-            id: `azure-final-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            id: `azure-final-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
             text: e.result.text,
             speaker: session.participantId || 'Unknown', // Use actual participant ID/phone number
             timestamp: Date.now(),
@@ -135,18 +135,27 @@ async function attachAzureTranscriptionService(io) {
       const audioData = data.data || data;
       const durationSec = data.durationSec || 0.02;
       
-      // data should be a Buffer or Uint8Array
-      session.pushStream.write(audioData);
+      // Log audio reception for debugging
+      console.log(`🔊 Received audio chunk from ${socket.id} (${audioData.length} bytes, ${durationSec}s)`);
       
-      // Estimate usage: assume 16kHz, 16-bit mono PCM (32KB/minute ~ 0.5KB/sec)
-      // We'll increment seconds by chunk duration if provided, else estimate
-      session.seconds += durationSec;
-      usedSeconds += durationSec;
-      
-      if (usedSeconds >= FREE_TIER_SECONDS) {
-        session.pushStream.close();
-        session.recognizer.stopContinuousRecognitionAsync();
-        socket.emit('transcription-error', { message: 'Azure free tier limit reached. Stopping transcription.' });
+      // Only process with Azure if session exists and Azure is configured
+      if (session.recognizer && session.pushStream) {
+        // data should be a Buffer or Uint8Array
+        session.pushStream.write(audioData);
+        
+        // Estimate usage: assume 16kHz, 16-bit mono PCM (32KB/minute ~ 0.5KB/sec)
+        // We'll increment seconds by chunk duration if provided, else estimate
+        session.seconds += durationSec;
+        usedSeconds += durationSec;
+        
+        if (usedSeconds >= FREE_TIER_SECONDS) {
+          session.pushStream.close();
+          session.recognizer.stopContinuousRecognitionAsync();
+          socket.emit('transcription-error', { message: 'Azure free tier limit reached. Stopping transcription.' });
+        }
+      } else {
+        // Azure not configured or session not properly initialized
+        console.log(`⚠️ Audio received but Azure not configured for session ${socket.id}`);
       }
     });
 
