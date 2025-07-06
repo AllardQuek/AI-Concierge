@@ -1,5 +1,5 @@
 import { SocketService } from './socket';
-import { TranscriptionResult } from './transcription';
+import { TranscriptionResult } from './types';
 
 export class AzureTranscriptionService {
   private socket: SocketService | null = null;
@@ -249,6 +249,8 @@ export class AzureTranscriptionService {
             } else {
               console.warn('🔊 No socket available to send audio chunk');
             }
+          } else if (event.data.type === 'audio-data' && !this.isRecording) {
+            console.log('🔊 Audio data received but recording stopped - ignoring');
           }
         };
 
@@ -323,28 +325,37 @@ export class AzureTranscriptionService {
   }
 
   stopTranscription(): void {
+    console.log('🔊 Stopping Azure transcription...');
+    console.log('🔊 isRecording before stop:', this.isRecording);
+    
     this.isRecording = false;
+    console.log('🔊 isRecording after stop:', this.isRecording);
 
     // Clear fallback interval
     this.clearFallbackInterval();
 
     // Stop Azure transcription
     if (this.socket) {
+      console.log('🔊 Stopping transcription on socket...');
       this.socket.stopTranscription();
     }
 
     // Clean up audio processing
     if (this.audioProcessor) {
+      console.log('🔊 Disconnecting audio processor...');
       this.audioProcessor.disconnect();
       this.audioProcessor = null;
+      console.log('🔊 Audio processor disconnected and nulled');
     }
 
     if (this.audioContext) {
+      console.log('🔊 Closing audio context...');
       this.audioContext.close();
       this.audioContext = null;
+      console.log('🔊 Audio context closed and nulled');
     }
 
-    console.log('🔊 Azure transcription stopped');
+    console.log('🔊 Azure transcription stopped completely');
   }
 
   onTranscription(callback: (result: TranscriptionResult) => void): void {
