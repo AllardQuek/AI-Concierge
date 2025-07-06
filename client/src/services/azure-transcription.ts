@@ -7,7 +7,7 @@ export class AzureTranscriptionService {
   private onTranscriptionCallback?: (result: TranscriptionResult) => void;
   private onErrorCallback?: (error: string) => void;
   private audioContext: AudioContext | null = null;
-  private audioProcessor: ScriptProcessorNode | null = null;
+  private audioProcessor: AudioWorkletNode | ScriptProcessorNode | null = null;
   private participantId: string = '';
   private fallbackMode: boolean = false;
   private fallbackInterval: number | null = null;
@@ -188,47 +188,103 @@ export class AzureTranscriptionService {
       
       const source = this.audioContext.createMediaStreamSource(audioStream);
       
-      // Use ScriptProcessorNode (deprecated but functional)
-      this.audioProcessor = this.audioContext.createScriptProcessor(4096, 1, 1) as any;
-      
-      (this.audioProcessor as any).onaudioprocess = (event: any) => {
-        if (!this.isRecording) return;
-
-        const inputBuffer = event.inputBuffer;
-        const inputData = inputBuffer.getChannelData(0);
+      // Try to load AudioWorklet first
+      try {
+        console.log('🔊 Loading AudioWorklet...');
+        await this.audioContext.audioWorklet.addModule('/audio-processor.js');
+        console.log('🔊 AudioWorklet loaded successfully');
         
-        // Convert to Uint8Array for sending to server
-        const audioData = new Uint8Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          audioData[i] = Math.max(-1, Math.min(1, inputData[i])) * 127 + 128;
-        }
+        // Create AudioWorkletNode
+        this.audioProcessor = new AudioWorkletNode(this.audioContext, 'audio-processor', {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [1]
+        });
+        
+        // Handle audio data from the worklet
+        this.audioProcessor.port.onmessage = (event) => {
+          if (event.data.type === 'audio-data' && this.isRecording) {
+            const { data, duration } = event.data;
+            
+            // Convert Float32Array to Uint8Array for sending to server
+            const audioData = new Uint8Array(data.length);
+            for (let i = 0; i < data.length; i++) {
+              audioData[i] = Math.max(-1, Math.min(1, data[i])) * 127 + 128;
+            }
 
-        // Send audio chunk to server regardless of fallback mode
-        if (this.socket) {
-          console.log(`🔊 Sending audio chunk: ${audioData.length} bytes, duration: ${inputBuffer.duration}s`);
-          this.socket.sendAudioChunk(audioData, inputBuffer.duration);
-          
-          // Log in fallback mode for debugging
-          if (this.fallbackMode) {
-            console.log('🔊 Audio sent to server (fallback mode - Azure not configured)');
+            // Send audio chunk to server regardless of fallback mode
+            if (this.socket) {
+              console.log(`🔊 Sending audio chunk (AudioWorklet): ${audioData.length} bytes, duration: ${duration}s`);
+              this.socket.sendAudioChunk(audioData, duration);
+              
+              // Log in fallback mode for debugging
+              if (this.fallbackMode) {
+                console.log('🔊 Audio sent to server (fallback mode - Azure not configured)');
+              }
+            } else {
+              console.warn('🔊 No socket available to send audio chunk');
+            }
           }
-        } else {
-          console.warn('🔊 No socket available to send audio chunk');
-        }
-      };
+        };
 
-      if (this.audioProcessor) {
-        source.connect(this.audioProcessor);
-        this.audioProcessor.connect(this.audioContext.destination);
+        // Connect the audio nodes
+        if (this.audioProcessor) {
+          source.connect(this.audioProcessor as AudioNode);
+          (this.audioProcessor as AudioNode).connect(this.audioContext.destination);
+        }
+        
+        console.log('🔊 AudioWorklet processing pipeline set up successfully');
+        
+      } catch (workletError) {
+        console.warn('🔊 AudioWorklet failed, falling back to ScriptProcessorNode:', workletError);
+        this.setupScriptProcessorFallback(source);
+        return;
       }
       
-      console.log('🔊 Audio processing pipeline set up successfully');
       console.log('🔊 Audio processor created:', !!this.audioProcessor);
       console.log('🔊 Audio context state:', this.audioContext?.state);
     } catch (error) {
       console.error('Failed to set up audio processing:', error);
       throw error;
     }
+  }
+
+  private setupScriptProcessorFallback(source: MediaStreamAudioSourceNode): void {
+    console.log('🔊 Using ScriptProcessorNode fallback');
+    
+    // Use ScriptProcessorNode as fallback
+    this.audioProcessor = this.audioContext!.createScriptProcessor(4096, 1, 1) as any;
+    
+    (this.audioProcessor as any).onaudioprocess = (event: any) => {
+      if (!this.isRecording) return;
+
+      const inputBuffer = event.inputBuffer;
+      const inputData = inputBuffer.getChannelData(0);
+      
+      // Convert to Uint8Array for sending to server
+      const audioData = new Uint8Array(inputData.length);
+      for (let i = 0; i < inputData.length; i++) {
+        audioData[i] = Math.max(-1, Math.min(1, inputData[i])) * 127 + 128;
+      }
+
+      // Send audio chunk to server regardless of fallback mode
+      if (this.socket) {
+        console.log(`🔊 Sending audio chunk (ScriptProcessor): ${audioData.length} bytes, duration: ${inputBuffer.duration}s`);
+        this.socket.sendAudioChunk(audioData, inputBuffer.duration);
+        
+        // Log in fallback mode for debugging
+        if (this.fallbackMode) {
+          console.log('🔊 Audio sent to server (fallback mode - Azure not configured)');
+        }
+      } else {
+        console.warn('🔊 No socket available to send audio chunk');
+      }
+    };
+
+    source.connect(this.audioProcessor as AudioNode);
+    (this.audioProcessor as AudioNode).connect(this.audioContext!.destination);
+    
+    console.log('🔊 ScriptProcessorNode fallback set up successfully');
   }
 
   stopTranscription(): void {

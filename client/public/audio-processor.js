@@ -7,6 +7,7 @@ class AudioProcessor extends AudioWorkletProcessor {
     this.bufferSize = 4096;
     this.buffer = new Float32Array(this.bufferSize);
     this.bufferIndex = 0;
+    this.sampleRate = sampleRate;
   }
 
   process(inputs, outputs, parameters) {
@@ -26,7 +27,7 @@ class AudioProcessor extends AudioWorkletProcessor {
           this.port.postMessage({
             type: 'audio-data',
             data: this.buffer.slice(),
-            duration: this.bufferSize / sampleRate
+            duration: this.bufferSize / this.sampleRate
           });
           this.bufferIndex = 0;
         }
