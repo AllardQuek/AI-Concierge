@@ -16,6 +16,14 @@
         {
           "key": "PORT",
           "value": "10000"
+        },
+        {
+          "key": "AZURE_SPEECH_KEY",
+          "value": "your_actual_azure_key_here"
+        },
+        {
+          "key": "AZURE_SPEECH_REGION",
+          "value": "your_azure_region_here"
         }
       ]
     }
