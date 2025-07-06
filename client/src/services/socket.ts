@@ -16,6 +16,12 @@ export interface SocketEvents {
   'answer': (data: { answer: RTCSessionDescriptionInit; fromUserId: string }) => void;
   'ice-candidate': (data: { candidate: RTCIceCandidateInit; fromUserId: string }) => void;
   
+  // Azure transcription events
+  'transcript-partial': (data: { text: string }) => void;
+  'transcript-final': (data: { text: string }) => void;
+  'transcription-error': (data: { message: string }) => void;
+  'transcription-ended': () => void;
+  
   // Connection events
   'connect': () => void;
   'disconnect': (reason: string) => void;
@@ -181,6 +187,25 @@ export class SocketService {
   sendAudioStatus(isMuted: boolean): void {
     if (this.socket) {
       this.socket.emit('audio-status', { isMuted });
+    }
+  }
+
+  // Azure transcription methods
+  startTranscription(): void {
+    if (this.socket) {
+      this.socket.emit('start-transcription');
+    }
+  }
+
+  sendAudioChunk(data: Uint8Array, durationSec?: number): void {
+    if (this.socket) {
+      this.socket.emit('audio-chunk', { data, durationSec });
+    }
+  }
+
+  stopTranscription(): void {
+    if (this.socket) {
+      this.socket.emit('stop-transcription');
     }
   }
 

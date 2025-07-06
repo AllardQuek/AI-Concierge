@@ -13,7 +13,7 @@ export interface TranscriptionChunk {
 export interface TranscriptionResult {
   id: string;
   text: string;
-  speaker: 'A' | 'B';
+  speaker: string; // Allow any string for participant IDs
   timestamp: number;
   confidence: number;
   isFinal: boolean;

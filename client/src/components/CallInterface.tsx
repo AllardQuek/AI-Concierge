@@ -21,6 +21,8 @@ interface CallInterfaceProps {
   showTranscription: boolean;
   onToggleTranscription: () => void;
   transcripts: TranscriptionResult[];
+  isTranscriptionLoading?: boolean;
+  transcriptionError?: string;
 }
 
 const CallInterface: React.FC<CallInterfaceProps> = ({
@@ -38,6 +40,8 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
   showTranscription,
   onToggleTranscription,
   transcripts,
+  isTranscriptionLoading = false,
+  transcriptionError,
 }) => {
   // Format call duration as MM:SS
   const formatCallDuration = (seconds: number): string => {
@@ -179,9 +183,19 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                 variant={showTranscription ? "primary" : "secondary"}
                 size="large"
                 fullWidth
+                disabled={isTranscriptionLoading}
                 className="flex items-center justify-center gap-2"
               >
-                📝 {showTranscription ? 'Hide' : 'Show'} Transcription
+                {isTranscriptionLoading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    {showTranscription ? 'Stopping...' : 'Starting...'}
+                  </>
+                ) : (
+                  <>
+                    📝 {showTranscription ? 'Hide' : 'Show'} Transcription
+                  </>
+                )}
               </Button>
               <Button
                 onClick={onEndCall}
@@ -193,6 +207,15 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                 📞 End Call
               </Button>
             </div>
+            {/* Transcription Error */}
+            {transcriptionError && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700">
+                  ⚠️ {transcriptionError}
+                </p>
+              </div>
+            )}
+            
             {/* Inline Transcription Panel */}
             {showTranscription && (
               <div className="mt-6">
