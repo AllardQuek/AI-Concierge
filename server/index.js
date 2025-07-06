@@ -1,3 +1,22 @@
+// Load and validate environment configuration
+const { loadEnvironment, validateConfig, config } = require('./config/env');
+
+// Load environment variables
+loadEnvironment();
+
+// Validate configuration
+try {
+  validateConfig();
+  console.log(`🚀 Server starting in ${config.NODE_ENV} mode`);
+} catch (error) {
+  console.error('❌ Configuration validation failed:', error.message);
+  if (config.NODE_ENV === 'production') {
+    process.exit(1);
+  } else {
+    console.log('⚠️  Continuing in development mode with missing configuration');
+  }
+}
+
 const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');

@@ -5,12 +5,19 @@ const { SpeechConfig, AudioConfig, SpeechRecognizer } = require('microsoft-cogni
 const fs = require('fs').promises;
 const path = require('path');
 
-// TODO: Replace with your actual Azure Speech key and region, or load from env
-const AZURE_SPEECH_KEY = process.env.AZURE_SPEECH_KEY || 'YOUR_AZURE_SPEECH_KEY';
-const AZURE_SPEECH_REGION = process.env.AZURE_SPEECH_REGION || 'YOUR_AZURE_REGION';
+// Use centralized configuration
+const { isAzureConfigured, getAzureConfig } = require('./config/env');
 
-// Check if Azure credentials are properly configured
-const isAzureConfigured = AZURE_SPEECH_KEY !== 'YOUR_AZURE_SPEECH_KEY' && AZURE_SPEECH_REGION !== 'YOUR_AZURE_REGION';
+// Get Azure configuration
+const azureConfig = getAzureConfig();
+const AZURE_SPEECH_KEY = azureConfig.key;
+const AZURE_SPEECH_REGION = azureConfig.region;
+
+// Debug logging for Azure configuration
+console.log('🔊 Azure configuration check:');
+console.log('  AZURE_SPEECH_KEY:', AZURE_SPEECH_KEY ? 'SET' : 'NOT SET');
+console.log('  AZURE_SPEECH_REGION:', AZURE_SPEECH_REGION ? 'SET' : 'NOT SET');
+console.log('  isAzureConfigured:', azureConfig.isConfigured);
 
 // Free tier: 5 hours/month = 18,000 seconds
 const FREE_TIER_SECONDS = 18000;
