@@ -199,7 +199,10 @@ export class SocketService {
 
   sendAudioChunk(data: Uint8Array, durationSec?: number): void {
     if (this.socket) {
+      console.log(`🔊 SocketService: Emitting audio-chunk event: ${data.length} bytes, ${durationSec}s`);
       this.socket.emit('audio-chunk', { data, durationSec });
+    } else {
+      console.warn('🔊 SocketService: No socket available to send audio chunk');
     }
   }
 

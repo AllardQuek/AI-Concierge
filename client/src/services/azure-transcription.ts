@@ -188,8 +188,7 @@ export class AzureTranscriptionService {
       
       const source = this.audioContext.createMediaStreamSource(audioStream);
       
-      // Use ScriptProcessorNode for now (AudioWorklet requires more complex setup)
-      // TODO: Migrate to AudioWorkletNode when we have time for proper implementation
+      // Use ScriptProcessorNode (deprecated but functional)
       this.audioProcessor = this.audioContext.createScriptProcessor(4096, 1, 1) as any;
       
       (this.audioProcessor as any).onaudioprocess = (event: any) => {
@@ -206,12 +205,15 @@ export class AzureTranscriptionService {
 
         // Send audio chunk to server regardless of fallback mode
         if (this.socket) {
+          console.log(`🔊 Sending audio chunk: ${audioData.length} bytes, duration: ${inputBuffer.duration}s`);
           this.socket.sendAudioChunk(audioData, inputBuffer.duration);
           
           // Log in fallback mode for debugging
           if (this.fallbackMode) {
             console.log('🔊 Audio sent to server (fallback mode - Azure not configured)');
           }
+        } else {
+          console.warn('🔊 No socket available to send audio chunk');
         }
       };
 
@@ -220,7 +222,9 @@ export class AzureTranscriptionService {
         this.audioProcessor.connect(this.audioContext.destination);
       }
       
-      console.log('🔊 Audio processing pipeline set up');
+      console.log('🔊 Audio processing pipeline set up successfully');
+      console.log('🔊 Audio processor created:', !!this.audioProcessor);
+      console.log('🔊 Audio context state:', this.audioContext?.state);
     } catch (error) {
       console.error('Failed to set up audio processing:', error);
       throw error;

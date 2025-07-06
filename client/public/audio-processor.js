@@ -2,79 +2,44 @@
 // This runs in the audio worklet thread for minimal latency
 
 class AudioProcessor extends AudioWorkletProcessor {
-  constructor(options) {
+  constructor() {
     super();
-    
-    this.chunkSize = options.processorOptions.chunkSize || 4000; // 250ms at 16kHz
-    this.speaker = options.processorOptions.speaker || 'unknown';
-    this.buffer = new Float32Array(this.chunkSize);
+    this.bufferSize = 4096;
+    this.buffer = new Float32Array(this.bufferSize);
     this.bufferIndex = 0;
-    
-    // Audio processing parameters
-    this.sampleRate = sampleRate;
-    this.channelCount = 1; // Mono for speech processing
-    
-    console.log(`AudioProcessor initialized for ${this.speaker} with chunk size ${this.chunkSize}`);
   }
 
   process(inputs, outputs, parameters) {
     const input = inputs[0];
+    const output = outputs[0];
     
-    if (input && input.length > 0) {
-      const inputChannel = input[0]; // Use first channel (mono)
+    if (input.length > 0) {
+      const inputChannel = input[0];
       
+      // Copy input data to our buffer
       for (let i = 0; i < inputChannel.length; i++) {
-        // Apply noise gate to filter out background noise
-        const sample = this.applyNoiseGate(inputChannel[i]);
-        
-        this.buffer[this.bufferIndex] = sample;
+        this.buffer[this.bufferIndex] = inputChannel[i];
         this.bufferIndex++;
         
-        // When buffer is full, send it for processing
-        if (this.bufferIndex >= this.chunkSize) {
-          this.sendAudioChunk();
+        // When buffer is full, send it to main thread
+        if (this.bufferIndex >= this.bufferSize) {
+          this.port.postMessage({
+            type: 'audio-data',
+            data: this.buffer.slice(),
+            duration: this.bufferSize / sampleRate
+          });
           this.bufferIndex = 0;
         }
       }
+      
+      // Copy input to output (pass-through)
+      for (let i = 0; i < inputChannel.length; i++) {
+        output[0][i] = inputChannel[i];
+      }
     }
     
-    // Keep the processor alive
     return true;
-  }
-  
-  applyNoiseGate(sample, threshold = 0.01) {
-    // Simple noise gate to filter out low-level background noise
-    return Math.abs(sample) > threshold ? sample : 0;
-  }
-  
-  sendAudioChunk() {
-    // Create a copy of the buffer to send
-    const chunk = new Float32Array(this.buffer);
-    
-    // Calculate audio level for voice activity detection
-    const audioLevel = this.calculateAudioLevel(chunk);
-    
-    // Only send if there's significant audio activity
-    if (audioLevel > 0.005) {
-      this.port.postMessage({
-        type: 'audio-chunk',
-        chunk: chunk,
-        speaker: this.speaker,
-        timestamp: currentTime * 1000, // Convert to milliseconds
-        audioLevel: audioLevel,
-        sampleRate: this.sampleRate
-      });
-    }
-  }
-  
-  calculateAudioLevel(buffer) {
-    let sum = 0;
-    for (let i = 0; i < buffer.length; i++) {
-      sum += Math.abs(buffer[i]);
-    }
-    return sum / buffer.length;
   }
 }
 
-// Register the processor
 registerProcessor('audio-processor', AudioProcessor);
