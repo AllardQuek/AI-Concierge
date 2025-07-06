@@ -1,7 +1,7 @@
 import React from 'react';
 import { Button, ConnectionStatus, ErrorMessage } from './shared';
 import TranscriptionPanel from './TranscriptionPanel';
-import { TranscriptionResult } from '../services/transcription';
+import { TranscriptionResult } from '../services/types';
 
 export type CallState = 'idle' | 'outgoing' | 'incoming' | 'connected';
 

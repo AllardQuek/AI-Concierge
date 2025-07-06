@@ -32,6 +32,11 @@ async function attachAzureTranscriptionService(io) {
   io.on('connection', (socket) => {
     console.log(`🔊 Azure transcription: New socket connection ${socket.id}`);
     
+    // Catch-all event logger for debugging
+    socket.onAny((event, ...args) => {
+      console.log(`[SOCKET DEBUG] Event: ${event}`, args);
+    });
+
     socket.on('start-transcription', () => {
       if (usedSeconds >= FREE_TIER_SECONDS) {
         console.log(`🔊 Azure transcription: Free tier limit reached (${usedSeconds}/${FREE_TIER_SECONDS} seconds)`);
@@ -128,15 +133,18 @@ async function attachAzureTranscriptionService(io) {
     });
 
     socket.on('audio-chunk', (data) => {
-      const session = sessions[socket.id];
-      if (!session) return;
-      
       // Extract audio data from the payload
       const audioData = data.data || data;
       const durationSec = data.durationSec || 0.02;
       
-      // Log audio reception for debugging
+      // Always log audio reception for debugging (even without Azure session)
       console.log(`🔊 Received audio chunk from ${socket.id} (${audioData.length} bytes, ${durationSec}s)`);
+      
+      const session = sessions[socket.id];
+      if (!session) {
+        console.log(`⚠️ Audio received but no Azure session exists for ${socket.id} (Azure not configured)`);
+        return;
+      }
       
       // Only process with Azure if session exists and Azure is configured
       if (session.recognizer && session.pushStream) {

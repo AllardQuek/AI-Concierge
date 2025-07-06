@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TranscriptionResult } from '../services/transcription';
+import { TranscriptionResult } from '../services/types';
 
 interface TranscriptionPanelProps {
   isVisible: boolean;
