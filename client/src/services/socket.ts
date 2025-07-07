@@ -197,10 +197,14 @@ export class SocketService {
     }
   }
 
-  sendAudioChunk(data: Uint8Array, durationSec?: number): void {
+  /**
+   * Send an audio chunk to the server for transcription.
+   * @param payload - Object containing data (Uint8Array), durationSec (number), and sampleRate (number)
+   */
+  sendAudioChunk(payload: { data: Uint8Array; durationSec: number; sampleRate: number }): void {
     if (this.socket) {
-      console.log(`🔊 SocketService: Emitting audio-chunk event: ${data.length} bytes, ${durationSec}s`);
-      this.socket.emit('audio-chunk', { data, durationSec });
+      // console.log(`🔊 SocketService: Emitting audio-chunk event: ${payload.data.length} bytes, ${payload.durationSec}s, sampleRate: ${payload.sampleRate}`);
+      this.socket.emit('audio-chunk', payload);
     } else {
       console.warn('🔊 SocketService: No socket available to send audio chunk');
     }

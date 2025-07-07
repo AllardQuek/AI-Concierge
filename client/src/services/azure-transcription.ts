@@ -197,6 +197,7 @@ export class AzureTranscriptionService {
       console.log('🔊 Creating AudioContext...');
       this.audioContext = new AudioContext();
       console.log('🔊 AudioContext created, state:', this.audioContext.state);
+      console.log('🔊 AudioContext sample rate:', this.audioContext.sampleRate);
       
       // Handle mobile audio context suspension
       if (this.audioContext.state === 'suspended') {
@@ -226,10 +227,10 @@ export class AzureTranscriptionService {
         
         // Handle audio data from the worklet
         this.audioProcessor.port.onmessage = (event) => {
-          console.log('🔊 Received message from AudioWorklet:', event.data.type);
+          // console.log('🔊 Received message from AudioWorklet:', event.data.type);
           if (event.data.type === 'audio-data' && this.isRecording) {
             const { data, duration } = event.data;
-            console.log(`🔊 Processing audio data: ${data.length} samples, duration: ${duration}s, converting to 16-bit PCM`);
+            // console.log(`🔊 Processing audio data: ${data.length} samples, duration: ${duration}s, converting to 16-bit PCM`);
             
             // Convert Float32Array to 16-bit PCM for Azure Speech-to-Text
             const int16Data = new Int16Array(data.length);
@@ -240,10 +241,14 @@ export class AzureTranscriptionService {
             // Convert Int16Array to Uint8Array for transmission
             const audioData = new Uint8Array(int16Data.buffer);
 
-            // Send audio chunk to server regardless of fallback mode
+            // When sending audio chunk to server, include sampleRate
             if (this.socket) {
-              console.log(`🔊 Sending audio chunk (AudioWorklet): ${audioData.length} bytes, duration: ${duration}s, 16-bit PCM format`);
-              this.socket.sendAudioChunk(audioData, duration);
+              // console.log(`🔊 Sending audio chunk (AudioWorklet): ${audioData.length} bytes, duration: ${duration}s, 16-bit PCM format`);
+              this.socket.sendAudioChunk({
+                data: audioData,
+                durationSec: duration,
+                sampleRate: this.audioContext?.sampleRate ?? 48000
+              });
               
               // Log in fallback mode for debugging
               if (this.fallbackMode) {
@@ -308,10 +313,13 @@ export class AzureTranscriptionService {
       // Convert Int16Array to Uint8Array for transmission
       const audioData = new Uint8Array(int16Data.buffer);
 
-      // Send audio chunk to server regardless of fallback mode
+      // When sending audio chunk to server, include sampleRate
       if (this.socket) {
-        console.log(`🔊 Sending audio chunk (ScriptProcessor): ${audioData.length} bytes, duration: ${inputBuffer.duration}s, 16-bit PCM format`);
-        this.socket.sendAudioChunk(audioData, inputBuffer.duration);
+        this.socket.sendAudioChunk({
+          data: audioData,
+          durationSec: inputBuffer.duration,
+          sampleRate: this.audioContext?.sampleRate ?? 48000
+        });
         
         // Log in fallback mode for debugging
         if (this.fallbackMode) {

@@ -17,7 +17,17 @@
     "wake-backend": "./scripts/wake-backend.sh",
     "check-ports": "./scripts/check-ports.sh"
   },
-  "keywords": ["sybil", "ai-assistant", "voice-chat", "webrtc", "prophetic-ai", "oracle", "react", "nodejs", "socket.io"],
+  "keywords": [
+    "sybil",
+    "ai-assistant",
+    "voice-chat",
+    "webrtc",
+    "prophetic-ai",
+    "oracle",
+    "react",
+    "nodejs",
+    "socket.io"
+  ],
   "author": "",
   "license": "MIT",
   "devDependencies": {

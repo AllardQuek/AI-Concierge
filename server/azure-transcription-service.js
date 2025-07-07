@@ -39,9 +39,9 @@ async function attachAzureTranscriptionService(io) {
     console.log(`🔊 Azure transcription: New socket connection ${socket.id}`);
     
     // Catch-all event logger for debugging
-    socket.onAny((event, ...args) => {
-      console.log(`[SOCKET DEBUG] Event: ${event}`, args);
-    });
+    // socket.onAny((event, ...args) => {
+    //   console.log(`[SOCKET DEBUG] Event: ${event}`, args);
+    // });
 
     socket.on('start-transcription', () => {
       if (usedSeconds >= FREE_TIER_SECONDS) {
@@ -84,7 +84,8 @@ async function attachAzureTranscriptionService(io) {
           pushStream, 
           startTime: Date.now(), 
           seconds: 0,
-          conversationId: null // Will be set when conversation starts
+          conversationId: null, // Will be set when conversation starts
+          lastSampleRate: null // Track last sample rate
         };
         console.log(`🔊 Azure transcription: Started session for ${socket.id}`);
 
@@ -146,38 +147,78 @@ async function attachAzureTranscriptionService(io) {
       }
     });
 
-    socket.on('audio-chunk', (data) => {
-      // Extract audio data from the payload
-      const audioData = data.data || data;
-      const durationSec = data.durationSec || 0.02;
-      
-      // Always log audio reception for debugging (even without Azure session)
-      console.log(`🔊 Received audio chunk from ${socket.id} (${audioData.length} bytes, ${durationSec}s, format: 16-bit PCM)`);
-      
+    socket.on('audio-chunk', async (data) => {
       const session = sessions[socket.id];
-      if (!session) {
-        console.log(`⚠️ Audio received but no Azure session exists for ${socket.id} (Azure not configured)`);
+      if (!session) return;
+      let audioData = data.data || data;
+      const durationSec = data.durationSec || 0.02;
+      const inputSampleRate = data.sampleRate || 48000; // Use sample rate from client, default to 48000
+      const targetSampleRate = 16000;
+
+      // Optionally, warn if sample rate changes mid-session
+      if (session.lastSampleRate && session.lastSampleRate !== inputSampleRate) {
+        console.warn(`Sample rate changed for session ${socket.id}: ${session.lastSampleRate} -> ${inputSampleRate}`);
+      }
+      session.lastSampleRate = inputSampleRate;
+
+      // Accept Uint8Array, ArrayBuffer, or Array
+      let int16Input;
+      if (audioData instanceof Uint8Array) {
+        // Ensure alignment by copying to a new buffer if needed
+        if (audioData.byteOffset % 2 === 0 && audioData.byteLength % 2 === 0) {
+          int16Input = new Int16Array(audioData.buffer, audioData.byteOffset, audioData.byteLength / 2);
+        } else {
+          // Copy to a new buffer that is aligned
+          const aligned = new Uint8Array(audioData);
+          int16Input = new Int16Array(aligned.buffer, 0, Math.floor(aligned.byteLength / 2));
+        }
+      } else if (audioData instanceof ArrayBuffer) {
+        int16Input = new Int16Array(audioData);
+      } else if (Array.isArray(audioData)) {
+        // Convert plain array to Int16Array
+        int16Input = new Int16Array(new Uint8Array(audioData).buffer);
+        console.warn('audio-chunk: Received plain Array, converted to Int16Array');
+      } else {
+        console.error('audio-chunk: Unexpected audioData type', typeof audioData, audioData);
+        socket.emit('transcription-error', { message: 'Server error: Invalid audio data format.' });
         return;
       }
-      
-      // Only process with Azure if session exists and Azure is configured
-      if (session.recognizer && session.pushStream) {
-        // data should be a Buffer or Uint8Array
-        session.pushStream.write(audioData);
-        
-        // Estimate usage: assume 16kHz, 16-bit mono PCM (32KB/minute ~ 0.5KB/sec)
-        // We'll increment seconds by chunk duration if provided, else estimate
-        session.seconds += durationSec;
-        usedSeconds += durationSec;
-        
-        if (usedSeconds >= FREE_TIER_SECONDS) {
-          session.pushStream.close();
-          session.recognizer.stopContinuousRecognitionAsync();
-          socket.emit('transcription-error', { message: 'Azure free tier limit reached. Stopping transcription.' });
-        }
-      } else {
-        // Azure not configured or session not properly initialized
-        console.log(`⚠️ Audio received but Azure not configured for session ${socket.id}`);
+
+      // 3. Convert Int16Array to Float32Array for resampling
+      const float32Input = new Float32Array(int16Input.length);
+      for (let i = 0; i < int16Input.length; i++) {
+        float32Input[i] = int16Input[i] / 32768;
+      }
+
+      // 4. Resample from inputSampleRate to 16000 Hz
+      let resampledFloat32;
+      try {
+        resampledFloat32 = resample(float32Input, 1, inputSampleRate, targetSampleRate);
+      } catch (err) {
+        console.error('Resampling error:', err);
+        // Fallback: send original audio (may result in empty transcripts)
+        resampledFloat32 = float32Input;
+      }
+
+      // 5. Convert back to Int16Array
+      const resampledInt16 = new Int16Array(resampledFloat32.length);
+      for (let i = 0; i < resampledFloat32.length; i++) {
+        let s = Math.max(-1, Math.min(1, resampledFloat32[i]));
+        resampledInt16[i] = s < 0 ? s * 32768 : s * 32767;
+      }
+      const resampledBuffer = Buffer.from(resampledInt16.buffer);
+
+      // 6. Write to Azure push stream
+      session.pushStream.write(resampledBuffer);
+
+      // Usage tracking (as before)
+      session.seconds += durationSec;
+      usedSeconds += durationSec;
+
+      if (usedSeconds >= FREE_TIER_SECONDS) {
+        session.pushStream.close();
+        session.recognizer.stopContinuousRecognitionAsync();
+        socket.emit('transcription-error', { message: 'Azure free tier limit reached. Stopping transcription.' });
       }
     });
 
@@ -373,6 +414,21 @@ async function getAllConversationSummaries() {
     console.error('Error getting conversation summaries:', error);
     return [];
   }
+}
+
+function resample(input, channels, inputSampleRate, outputSampleRate) {
+  if (inputSampleRate === outputSampleRate) return input;
+  const sampleRateRatio = inputSampleRate / outputSampleRate;
+  const outputLength = Math.round(input.length / sampleRateRatio);
+  const output = new Float32Array(outputLength);
+  for (let i = 0; i < outputLength; i++) {
+    const idx = i * sampleRateRatio;
+    const idx1 = Math.floor(idx);
+    const idx2 = Math.min(idx1 + 1, input.length - 1);
+    const frac = idx - idx1;
+    output[i] = input[idx1] * (1 - frac) + input[idx2] * frac;
+  }
+  return output;
 }
 
 module.exports = { 

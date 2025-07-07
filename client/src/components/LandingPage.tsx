@@ -220,6 +220,7 @@ const LandingPage: React.FC = () => {
           setTimeout(() => {
             console.log(`⏰ Setting up incoming call state...`);
             updateCurrentCallPartner(callerCode);
+            setError(''); // Clear any previous errors when a new call comes in
             setCallState('incoming');
             setIsRinging(true);
             
