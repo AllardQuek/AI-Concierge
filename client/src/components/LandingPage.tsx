@@ -450,6 +450,13 @@ const LandingPage: React.FC = () => {
           }
           
           setCallState('idle');
+          // Notify the other participant that the call has ended due to failure
+          if (socketRef.current && currentCallPartner) {
+            socketRef.current.emit('end-call', {
+              targetCode: currentCallPartner,
+              callerCode: myNumber
+            });
+          }
         }
         stopCallDurationTimer(); // Stop timing when disconnected
       } else if (state === 'connecting') {
