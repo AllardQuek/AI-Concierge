@@ -554,6 +554,7 @@ const LandingPage: React.FC = () => {
       
       if (!offer) {
         console.error('❌ No offer found in window.incomingOffer');
+        cleanup();
         throw new Error('No offer received - the call may have expired or been cancelled');
       }
       
@@ -577,15 +578,21 @@ const LandingPage: React.FC = () => {
       setCallState('connected');
       
       // Clean up the stored offer
-      delete (window as any).incomingOffer;
+      if ((window as any).incomingOffer) {
+        delete (window as any).incomingOffer;
+      }
       
       // Start the call duration timer
       startCallDurationTimer();
       
     } catch (err) {
       console.error('❌ Failed to answer call:', err);
+      cleanup();
       setError(`Failed to answer call: ${err instanceof Error ? err.message : 'Unknown error'}`);
       setCallState('idle');
+      if ((window as any).incomingOffer) {
+        delete (window as any).incomingOffer;
+      }
     }
   };
 
@@ -604,6 +611,10 @@ const LandingPage: React.FC = () => {
 
   const handleCallFriend = async () => {
     if (!friendNumber.trim()) return;
+    if (callState !== 'idle') {
+      setError('Cannot start a new call while another call is in progress.');
+      return;
+    }
     
     try {
       // Normalize the phone number before calling
@@ -624,8 +635,12 @@ const LandingPage: React.FC = () => {
       
     } catch (err) {
       console.error('Failed to initiate call:', err);
+      cleanup();
       setError(`Failed to start call: ${err instanceof Error ? err.message : 'Unknown error'}`);
       setCallState('idle');
+      if ((window as any).incomingOffer) {
+        delete (window as any).incomingOffer;
+      }
     }
   };
 
@@ -647,12 +662,17 @@ const LandingPage: React.FC = () => {
         if (webrtcRef.current) {
           webrtcRef.current.restartIce().catch(() => {
             console.log('❌ ICE restart failed, ending call');
+            cleanup();
             setError('Connection timeout - network issues detected');
             setCallState('idle');
           });
         } else {
+          cleanup();
           setError('Connection timeout - please try again');
           setCallState('idle');
+        }
+        if ((window as any).incomingOffer) {
+          delete (window as any).incomingOffer;
         }
       }, 30000); // 30 second timeout
       
@@ -675,8 +695,12 @@ const LandingPage: React.FC = () => {
       console.log(`✅ Call initiated to ${targetNumber} from ${myNumber} with offer`);
       
     } catch (err) {
+      cleanup();
       setError(`Failed to initiate call: ${err instanceof Error ? err.message : 'Unknown error'}`);
       setCallState('idle');
+      if ((window as any).incomingOffer) {
+        delete (window as any).incomingOffer;
+      }
     }
   };
 
@@ -818,6 +842,10 @@ const LandingPage: React.FC = () => {
     setCallDuration(0);
     setIsMuted(false);
     setIsRinging(false);
+    
+    // Extra: reset error and call partner
+    setError('');
+    updateCurrentCallPartner('');
     
     console.log('✅ Call cleanup completed');
   };
