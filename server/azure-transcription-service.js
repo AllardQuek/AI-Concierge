@@ -1,7 +1,6 @@
 // Azure Speech-to-Text real-time transcription service for Socket.IO
 // Usage: require and call attachAzureTranscriptionService(io)
 
-const { SpeechConfig, AudioConfig, SpeechRecognizer } = require('microsoft-cognitiveservices-speech-sdk');
 const fs = require('fs').promises;
 const path = require('path');
 
@@ -65,7 +64,8 @@ async function attachAzureTranscriptionService(io) {
       }
       
       try {
-        const speechConfig = SpeechConfig.fromSubscription(AZURE_SPEECH_KEY, AZURE_SPEECH_REGION);
+        const sdk = require('microsoft-cognitiveservices-speech-sdk');
+        const speechConfig = sdk.SpeechConfig.fromSubscription(AZURE_SPEECH_KEY, AZURE_SPEECH_REGION);
         speechConfig.speechRecognitionLanguage = 'en-US';
         
         // Optimize for real-time 16-bit PCM audio
@@ -75,69 +75,68 @@ async function attachAzureTranscriptionService(io) {
         
         // Enable detailed logging for debugging
         speechConfig.setProperty(sdk.PropertyId.SpeechServiceConnection_LogFilename, "azure-speech.log");
-      // Use push stream for real-time audio
-      const sdk = require('microsoft-cognitiveservices-speech-sdk');
-      const pushStream = sdk.AudioInputStream.createPushStream();
-      const audioConfig = AudioConfig.fromStreamInput(pushStream);
-      const recognizer = new SpeechRecognizer(speechConfig, audioConfig);
-      sessions[socket.id] = { 
-        recognizer, 
-        pushStream, 
-        startTime: Date.now(), 
-        seconds: 0,
-        conversationId: null // Will be set when conversation starts
-      };
-      console.log(`🔊 Azure transcription: Started session for ${socket.id}`);
+        // Use push stream for real-time audio
+        const pushStream = sdk.AudioInputStream.createPushStream();
+        const audioConfig = sdk.AudioConfig.fromStreamInput(pushStream);
+        const recognizer = new sdk.SpeechRecognizer(speechConfig, audioConfig);
+        sessions[socket.id] = { 
+          recognizer, 
+          pushStream, 
+          startTime: Date.now(), 
+          seconds: 0,
+          conversationId: null // Will be set when conversation starts
+        };
+        console.log(`🔊 Azure transcription: Started session for ${socket.id}`);
 
-      recognizer.recognizing = (s, e) => {
-        console.log(`🔊 Azure transcription: Partial transcript for ${socket.id}: "${e.result.text}"`);
-        socket.emit('transcript-partial', { text: e.result.text });
-      };
-      recognizer.recognized = (s, e) => {
-        if (e.result.reason === sdk.ResultReason.RecognizedSpeech) {
-          console.log(`🔊 Azure transcription: Final transcript for ${socket.id}: "${e.result.text}"`);
-          
-          // Create transcript result
-          const transcript = {
-            id: `azure-final-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
-            text: e.result.text,
-            speaker: session.participantId || 'Unknown', // Use actual participant ID/phone number
-            timestamp: Date.now(),
-            confidence: 0.95,
-            isFinal: true
-          };
-          
-          // Save to conversation session if available
-          const session = sessions[socket.id];
-          if (session && session.conversationId) {
-            let conversation = conversations.get(session.conversationId);
-            if (!conversation) {
-              conversation = createConversationSession(session.conversationId);
-              conversations.set(session.conversationId, conversation);
-            }
-            conversation.addTranscript(transcript);
+        recognizer.recognizing = (s, e) => {
+          console.log(`🔊 Azure transcription: Partial transcript for ${socket.id}: "${e.result.text}"`);
+          socket.emit('transcript-partial', { text: e.result.text });
+        };
+        recognizer.recognized = (s, e) => {
+          if (e.result.reason === sdk.ResultReason.RecognizedSpeech) {
+            console.log(`🔊 Azure transcription: Final transcript for ${socket.id}: "${e.result.text}"`);
             
-            // Save to file
-            saveTranscript(session.conversationId, transcript);
+            // Create transcript result
+            const transcript = {
+              id: `azure-final-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+              text: e.result.text,
+              speaker: session.participantId || 'Unknown', // Use actual participant ID/phone number
+              timestamp: Date.now(),
+              confidence: 0.95,
+              isFinal: true
+            };
+            
+            // Save to conversation session if available
+            const session = sessions[socket.id];
+            if (session && session.conversationId) {
+              let conversation = conversations.get(session.conversationId);
+              if (!conversation) {
+                conversation = createConversationSession(session.conversationId);
+                conversations.set(session.conversationId, conversation);
+              }
+              conversation.addTranscript(transcript);
+              
+              // Save to file
+              saveTranscript(session.conversationId, transcript);
+            }
+            
+            socket.emit('transcript-final', { text: e.result.text });
           }
-          
-          socket.emit('transcript-final', { text: e.result.text });
-        }
-      };
-      recognizer.canceled = (s, e) => {
-        socket.emit('transcription-error', { message: 'Transcription canceled: ' + e.errorDetails });
-      };
-      recognizer.sessionStopped = () => {
-        socket.emit('transcription-ended');
-      };
-      recognizer.startContinuousRecognitionAsync();
-      
-      // Emit transcription started event
-      socket.emit('transcription-started', { 
-        conversationId: `azure-${Date.now()}`,
-        mode: 'azure' 
-      });
-      
+        };
+        recognizer.canceled = (s, e) => {
+          socket.emit('transcription-error', { message: 'Transcription canceled: ' + e.errorDetails });
+        };
+        recognizer.sessionStopped = () => {
+          socket.emit('transcription-ended');
+        };
+        recognizer.startContinuousRecognitionAsync();
+        
+        // Emit transcription started event
+        socket.emit('transcription-started', { 
+          conversationId: `azure-${Date.now()}`,
+          mode: 'azure' 
+        });
+        
       } catch (error) {
         console.error('🔊 Azure transcription: Failed to initialize Azure Speech service:', error);
         socket.emit('transcription-error', { 
