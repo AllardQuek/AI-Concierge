@@ -1,9 +1,9 @@
 #!/bin/bash
 
-# Port Management Script for Sybil Voice Bot
+# Port Management Script for Mulisa Voice Bot
 # Helps detect and resolve port conflicts
 
-echo "🔍 Checking Sybil Voice Bot Port Status..."
+echo "🔍 Checking Mulisa Voice Bot Port Status..."
 
 # Define expected ports
 FRONTEND_PORT=3000

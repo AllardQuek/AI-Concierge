@@ -1,7 +1,7 @@
 {
-  "name": "sybil-client",
+  "name": "mulisa-client",
   "version": "1.0.0",
-  "description": "Sybil AI voice platform - React client interface",
+  "description": "Mulisa AI voice platform - React client interface",
   "private": true,
   "dependencies": {
     "@heroicons/react": "^2.0.18",

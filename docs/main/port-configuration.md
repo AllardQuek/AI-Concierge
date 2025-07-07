@@ -1,4 +1,4 @@
-# Sybil Port Configuration Summary
+# Mulisa Port Configuration Summary
 
 ## 🔌 **Current Port Architecture** (Updated July 1, 2025)
 
@@ -63,7 +63,7 @@ curl http://localhost:3001/health
 ### AI Service Health Check  
 ```bash
 curl http://localhost:5001/health
-# Expected: {"status":"Sybil AI Service running","version":"1.0.0"}
+# Expected: {"status":"Mulisa AI Service running","version":"1.0.0"}
 ```
 
 ### Frontend Access

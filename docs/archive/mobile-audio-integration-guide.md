@@ -131,7 +131,7 @@ this.remoteAudioElement.autoplay = true;
 
 #### **iPhone Safari:**
 1. Open `http://localhost:5173/customer` 
-2. Enter your name and tap "Connect with Sybil"
+2. Enter your name and tap "Connect with Mulisa"
 3. **IMPORTANT:** Tap anywhere when prompted (for audio permissions)
 4. Call should work with audio
 
@@ -197,4 +197,4 @@ this.remoteAudioElement.autoplay = true;
 4. **Monitor performance** and user feedback
 5. **Remove test files** once satisfied with mobile audio performance
 
-Your Sybil voice platform now has robust mobile audio support and should work seamlessly across all devices! 🎉
+Your Mulisa voice platform now has robust mobile audio support and should work seamlessly across all devices! 🎉

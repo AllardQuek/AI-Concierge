@@ -6,7 +6,7 @@
 
 ## Context
 
-Sybil runs multiple services that need distinct ports:
+Mulisa runs multiple services that need distinct ports:
 
 - Client (React/Vite dev server)
 - Server (Socket.IO signaling server)  

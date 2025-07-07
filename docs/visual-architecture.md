@@ -1,10 +1,10 @@
-# Sybil Voice Calling Platform - Visual Architecture
+# Mulisa Voice Calling Platform - Visual Architecture
 
 ## 🏗️ System Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────┐
-│                          SYBIL VOICE CALLING PLATFORM                          │
+│                          MULISA VOICE CALLING PLATFORM                          │
 │                        "Simple WebRTC P2P Voice Calls"                         │
 │                                                                                 │
 │  ┌─────────────────┐                                        ┌─────────────────┐ │

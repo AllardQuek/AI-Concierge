@@ -1,8 +1,8 @@
-# Sybil Voice Calling Platform - UI Design Specification
+# Mulisa Voice Calling Platform - UI Design Specification
 
 ## 🎨 **Design Overview**
 
-This specification outlines the modern, clean user interface for Sybil's WebRTC-based voice calling platform, focusing on simplicity and ease of use.
+This specification outlines the modern, clean user interface for Mulisa's WebRTC-based voice calling platform, focusing on simplicity and ease of use.
 
 ### **Design Principles**
 - **Minimalist**: Clean, uncluttered interface focused on core functionality
@@ -13,7 +13,7 @@ This specification outlines the modern, clean user interface for Sybil's WebRTC-
 ### **Color Palette**
 ```
 Primary Colors:
-- Sybil Blue: #1976d2 (Primary actions, accents)
+- Mulisa Blue: #1976d2 (Primary actions, accents)
 - Oracle Purple: #7c4dff (Branding, highlights)
 - Success Green: #4caf50 (Connected state, positive actions)
 - Warning Orange: #ff9800 (Alerts, attention states)
@@ -30,7 +30,7 @@ Neutral Colors:
 
 ### **Landing Page**
 - **Layout**: Single-column, centered design
-- **Header**: Sybil logo with subtitle
+- **Header**: Mulisa logo with subtitle
 - **Main Area**: Phone number input with call button
 - **Status**: Connection indicator
 - **Size**: 400px max-width on desktop, full-width mobile

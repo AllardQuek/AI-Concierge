@@ -2,7 +2,7 @@
 
 ## 📋 **Overview**
 
-This document describes the implementation of real-time audio transcription for the Sybil voice calling platform. The solution uses a **Hybrid P2P + Server Audio Tap** approach to maintain high-quality calls while providing comprehensive transcription capabilities.
+This document describes the implementation of real-time audio transcription for the Mulisa voice calling platform. The solution uses a **Hybrid P2P + Server Audio Tap** approach to maintain high-quality calls while providing comprehensive transcription capabilities.
 
 ## 🏗️ **Architecture**
 
@@ -434,7 +434,7 @@ TRANSCRIPTION_RETENTION_DAYS=30
 
 ## ✅ **Conclusion**
 
-This implementation provides a robust, scalable foundation for real-time audio transcription in the Sybil platform. The hybrid approach maintains call quality while enabling comprehensive transcription capabilities.
+This implementation provides a robust, scalable foundation for real-time audio transcription in the Mulisa platform. The hybrid approach maintains call quality while enabling comprehensive transcription capabilities.
 
 **Key Benefits:**
 - ✅ **Maintains P2P call quality**

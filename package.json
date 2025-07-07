@@ -1,7 +1,7 @@
 {
-  "name": "sybil",
+  "name": "mulisa",
   "version": "1.0.0",
-  "description": "Sybil - AI-powered voice conversation platform with prophetic insights",
+  "description": "Mulisa - AI-powered voice conversation platform with prophetic insights",
   "main": "server/index.js",
   "scripts": {
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
@@ -18,7 +18,7 @@
     "check-ports": "./scripts/check-ports.sh"
   },
   "keywords": [
-    "sybil",
+    "mulisa",
     "ai-assistant",
     "voice-chat",
     "webrtc",

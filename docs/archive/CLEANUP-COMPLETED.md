@@ -1,7 +1,7 @@
-# 🧹 Sybil Cleanup Completed - Summary
+# 🧹 Mulisa Cleanup Completed - Summary
 
 ## Overview
-This document summarizes the major cleanup performed on the Sybil codebase to transform it from a customer/agent system to a focused peer-to-peer calling platform.
+This document summarizes the major cleanup performed on the Mulisa codebase to transform it from a customer/agent system to a focused peer-to-peer calling platform.
 
 ## 🗑️ **Removed Components & Files**
 

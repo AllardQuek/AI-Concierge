@@ -1,8 +1,8 @@
-# Sybil - Simple WebRTC Voice Calling Platform
+# Mulisa - Simple WebRTC Voice Calling Platform
 
 ## Current Architecture
 
-Sybil is a streamlined WebRTC-based voice calling platform that enables direct peer-to-peer audio communication between users through phone number matching.
+Mulisa is a streamlined WebRTC-based voice calling platform that enables direct peer-to-peer audio communication between users through phone number matching.
 
 ## Core Architecture
 

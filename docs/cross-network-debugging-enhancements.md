@@ -2,7 +2,7 @@
 
 ## Summary
 
-I've enhanced the Sybil voice chat application with comprehensive cross-network debugging capabilities to help diagnose and resolve connection issues when devices are on different networks (WiFi vs mobile data, different ISPs, etc.).
+I've enhanced the Mulisa voice chat application with comprehensive cross-network debugging capabilities to help diagnose and resolve connection issues when devices are on different networks (WiFi vs mobile data, different ISPs, etc.).
 
 ## Key Enhancements Added
 

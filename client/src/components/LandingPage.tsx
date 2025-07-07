@@ -122,8 +122,8 @@ const LandingPage: React.FC = () => {
     const sessionId = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     
     // Check if we have a session-specific number
-    const sessionKey = `sybil-user-number-${sessionId}`;
-    const globalKey = 'sybil-user-number';
+    const sessionKey = `mulisa-user-number-${sessionId}`;
+    const globalKey = 'mulisa-user-number';
     
     // First, try to get existing number for this session
     let existingNumber = sessionStorage.getItem(sessionKey);
@@ -131,7 +131,7 @@ const LandingPage: React.FC = () => {
     // If no session-specific number, check if we have a global one and this is the first tab
     if (!existingNumber) {
       const globalNumber = localStorage.getItem(globalKey);
-      const activeSessionsKey = 'sybil-active-sessions';
+      const activeSessionsKey = 'mulisa-active-sessions';
       const activeSessions = JSON.parse(localStorage.getItem(activeSessionsKey) || '[]');
       
       if (globalNumber && activeSessions.length === 0) {
@@ -167,7 +167,7 @@ const LandingPage: React.FC = () => {
     }
     
     // Track this session
-    const activeSessionsKey = 'sybil-active-sessions';
+    const activeSessionsKey = 'mulisa-active-sessions';
     const activeSessions = JSON.parse(localStorage.getItem(activeSessionsKey) || '[]');
     activeSessions.push({ sessionId, number: formattedNumber });
     localStorage.setItem(activeSessionsKey, JSON.stringify(activeSessions));
@@ -266,7 +266,7 @@ const LandingPage: React.FC = () => {
       
       // Clean up session tracking
       try {
-        const activeSessionsKey = 'sybil-active-sessions';
+        const activeSessionsKey = 'mulisa-active-sessions';
         const activeSessions = JSON.parse(localStorage.getItem(activeSessionsKey) || '[]');
         const updatedSessions = activeSessions.filter((session: any) => session.number !== myNumber);
         localStorage.setItem(activeSessionsKey, JSON.stringify(updatedSessions));
@@ -867,7 +867,7 @@ const LandingPage: React.FC = () => {
     setIsGeneratingNumber(true);
     
     // Clear current session number
-    const currentSessionKeys = Object.keys(sessionStorage).filter(key => key.startsWith('sybil-user-number-'));
+    const currentSessionKeys = Object.keys(sessionStorage).filter(key => key.startsWith('mulisa-user-number-'));
     currentSessionKeys.forEach(key => sessionStorage.removeItem(key));
     
     // Generate new number for this session

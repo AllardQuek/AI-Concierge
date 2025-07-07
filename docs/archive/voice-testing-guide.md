@@ -1,4 +1,4 @@
-# Voice Testing Guide for Sybil
+# Voice Testing Guide for Mulisa
 
 ## 🎯 Quick Test Checklist
 

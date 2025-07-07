@@ -1,4 +1,4 @@
-// Shared UI Components for Sybil Voice Platform
+// Shared UI Components for Mulisa Voice Platform
 export { HeadsetIcon, PhoneIcon, MicrophoneIcon, MicrophoneSlashIcon } from './Icons';
 export { ConnectionStatus } from './ConnectionStatus';
 export { Card } from './Card';

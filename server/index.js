@@ -30,7 +30,7 @@ const server = http.createServer(app);
 // Configure CORS for both Express and Socket.IO
 const allowedOrigins = process.env.NODE_ENV === 'production' 
   ? [
-      'https://ai-concierge-sybil.vercel.app',
+      'https://ai-concierge-mulisa.vercel.app',
       'https://ai-concierge-tgjt.vercel.app',
       'https://ai-concierge-tgjt-allardqueks-projects.vercel.app',
       ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [])

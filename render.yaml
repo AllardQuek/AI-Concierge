@@ -2,7 +2,7 @@
   "services": [
     {
       "type": "web",
-      "name": "sybil-backend",
+      "name": "mulisa-backend",
       "env": "node",
       "plan": "free",
       "buildCommand": "npm install",

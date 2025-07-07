@@ -1,4 +1,4 @@
-# Sybil - WebRTC Voice Calling Platform
+# Mulisa - WebRTC Voice Calling Platform
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -6,7 +6,7 @@
 ![React](https://img.shields.io/badge/react-18.2.0-blue)
 ![TypeScript](https://img.shields.io/badge/typescript-5.0-blue)
 
-A modern voice calling platform built with React (TypeScript), Node.js, and WebRTC. Named after the prophetic oracles of ancient Greece, Sybil provides direct peer-to-peer voice communication using phone number identifiers.
+A modern voice calling platform built with React (TypeScript), Node.js, and WebRTC. Named after the prophetic oracles of ancient Greece, Mulisa provides direct peer-to-peer voice communication using phone number identifiers.
 
 ## 🎯 Current Status
 
@@ -16,9 +16,9 @@ A modern voice calling platform built with React (TypeScript), Node.js, and WebR
 - ✅ **Mobile-Friendly**: Touch-optimized interface with vibration support
 - ✅ **Multi-Tab Support**: Each browser tab gets its own unique phone number
 
-## 🔮 About Sybil
+## 🔮 About Mulisa
 
-Named after the prophetic oracles of ancient Greece, Sybil provides a simple yet powerful voice calling experience. Users get assigned virtual phone numbers and can call each other directly through their browsers using WebRTC technology.
+Named after the prophetic oracles of ancient Greece, Mulisa provides a simple yet powerful voice calling experience. Users get assigned virtual phone numbers and can call each other directly through their browsers using WebRTC technology.
 
 ## 🚀 Features
 
@@ -129,7 +129,7 @@ The client connects to `http://localhost:3001` by default. To change the server 
 
 ## 🌐 Deployment
 
-Ready to deploy your Sybil voice platform? We support both free and paid hosting options.
+Ready to deploy your Mulisa voice platform? We support both free and paid hosting options.
 
 ### 🆓 Quick Deploy (Free)
 **Backend:** Render.com | **Frontend:** Vercel

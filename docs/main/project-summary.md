@@ -1,8 +1,8 @@
-# Sybil Project Summary - Current Status & Architecture
+# Mulisa Project Summary - Current Status & Architecture
 
 ## 🎯 Project Overview
 
-**Sybil** is a WebRTC-based voice calling platform that enables peer-to-peer voice communication using phone number codes. Named after the prophetic oracles of ancient Greece, Sybil provides a simple, clean interface for direct voice calling between users.
+**Mulisa** is a WebRTC-based voice calling platform that enables peer-to-peer voice communication using phone number codes. Named after the prophetic oracles of ancient Greece, Mulisa provides a simple, clean interface for direct voice calling between users.
 
 ## 📊 Implementation Status
 
@@ -174,7 +174,7 @@ npm run dev          # Start both client and server
 
 ## 🎉 Summary
 
-Sybil demonstrates a clean, effective implementation of WebRTC peer-to-peer voice calling with a modern React interface. The application focuses on core functionality - making and receiving voice calls - without unnecessary complexity.
+Mulisa demonstrates a clean, effective implementation of WebRTC peer-to-peer voice calling with a modern React interface. The application focuses on core functionality - making and receiving voice calls - without unnecessary complexity.
 
 **Current State**: Fully functional P2P voice calling platform
 **Architecture**: Simple, robust, and easily extensible
@@ -184,4 +184,4 @@ The platform proves that powerful real-time communication can be achieved with s
 
 ---
 
-*Sybil - Simple. Direct. Connected.*
+*Mulisa - Simple. Direct. Connected.*

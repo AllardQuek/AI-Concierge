@@ -1,6 +1,6 @@
 # Architecture Decision Records (ADRs)
 
-This directory contains Architecture Decision Records (ADRs) for the Sybil voice conversation platform. ADRs document important architectural decisions, their context, rationale, and consequences.
+This directory contains Architecture Decision Records (ADRs) for the Mulisa voice conversation platform. ADRs document important architectural decisions, their context, rationale, and consequences.
 
 ## Format
 

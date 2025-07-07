@@ -6,7 +6,7 @@
 
 ## Context
 
-The Sybil customer interface needs to manage socket connections for real-time communication with the signaling server. When a customer ends a call, we needed to decide whether to:
+The Mulisa customer interface needs to manage socket connections for real-time communication with the signaling server. When a customer ends a call, we needed to decide whether to:
 
 1. **Maintain persistent connection** and keep socket open with an "idle" state
 2. **Disconnect/reconnect** pattern where socket is closed after each call

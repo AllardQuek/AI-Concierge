@@ -1,4 +1,4 @@
-# Sybil Voice Communication Platform - Current Functionality Review
+# Mulisa Voice Communication Platform - Current Functionality Review
 
 *Last Updated: December 2024*
 
@@ -110,7 +110,7 @@
 
 ## **🎯 Summary**
 
-**Sybil is currently a fully functional WebRTC voice calling application** featuring:
+**Mulisa is currently a fully functional WebRTC voice calling application** featuring:
 
 - **Simple & Clean**: Phone number input → direct calling
 - **Real P2P Audio**: True peer-to-peer WebRTC communication

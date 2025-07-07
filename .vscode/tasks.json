@@ -2,7 +2,7 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Start Sybil Development",
+			"label": "Start Mulisa Development",
 			"type": "shell",
 			"command": "npm",
 			"args": [

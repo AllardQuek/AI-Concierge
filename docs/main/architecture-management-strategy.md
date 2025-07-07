@@ -1,4 +1,4 @@
-# Sybil Architecture Management Strategy
+# Mulisa Architecture Management Strategy
 
 ## 🎯 **Architecture Documentation Strategy**
 
@@ -104,7 +104,7 @@ docs/architecture/
 # In each .mmd file header
 ---
 title: "System Architecture Overview"
-description: "High-level view of Sybil's service architecture"
+description: "High-level view of Mulisa's service architecture"
 lastUpdated: "2025-07-01"
 version: "1.2.0"
 ---

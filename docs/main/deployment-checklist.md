@@ -1,4 +1,4 @@
-# 🚀 Sybil Deployment Checklist
+# 🚀 Mulisa Deployment Checklist
 
 ## Pre-Deployment Setup
 

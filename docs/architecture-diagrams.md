@@ -1,4 +1,4 @@
-# Sybil Architecture Diagrams - WebRTC Voice Calling App
+# Mulisa Architecture Diagrams - WebRTC Voice Calling App
 
 ## 🖼️ Mermaid Diagrams (GitHub/VS Code Compatible)
 
@@ -117,7 +117,7 @@ graph LR
         note1[Audio travels through server<br/>Higher latency, server load]
     end
     
-    subgraph "Sybil WebRTC P2P"
+    subgraph "Mulisa WebRTC P2P"
         U1B[User 1] -.->|Direct Audio| U2B[User 2]
         U1B --> SB[Signaling Server]
         SB --> U2B

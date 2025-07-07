@@ -1,4 +1,4 @@
-# Sybil Development Workflow - Git Guide
+# Mulisa Development Workflow - Git Guide
 
 ## 🌳 Branch Structure
 

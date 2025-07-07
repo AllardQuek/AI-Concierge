@@ -1,4 +1,4 @@
-# Dockerfile for Sybil Server
+# Dockerfile for Mulisa Server
 FROM node:18-alpine
 
 WORKDIR /app

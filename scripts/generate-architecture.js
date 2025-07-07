@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Sybil Architecture Documentation Generator
+ * Mulisa Architecture Documentation Generator
  * Rebuilds architecture-visual.html from Mermaid source files
  */
 
@@ -24,7 +24,7 @@ const htmlTemplate = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sybil Architecture Diagrams</title>
+    <title>Mulisa Architecture Diagrams</title>
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <style>
         body {
@@ -71,7 +71,7 @@ const htmlTemplate = `<!DOCTYPE html>
 </head>
 <body>
     <div class="container">
-        <h1>🏗️ Sybil AI-Enhanced Voice Platform - Architecture Diagrams</h1>
+        <h1>🏗️ Mulisa AI-Enhanced Voice Platform - Architecture Diagrams</h1>
         
         <div class="update-info">
             <strong>📅 Last Updated:</strong> ${new Date().toISOString().split('T')[0]} | 

@@ -179,8 +179,8 @@ If you see the connection status jumping between connected/disconnected:
 
 Update these with your actual URLs:
 
-- **Frontend:** `https://sybil-voice.vercel.app`
-- **Backend:** `https://sybil-backend.onrender.com`
-- **Health:** `https://sybil-backend.onrender.com/health`
+- **Frontend:** `https://mulisa-voice.vercel.app`
+- **Backend:** `https://mulisa-backend.onrender.com`
+- **Health:** `https://mulisa-backend.onrender.com/health`
 
-🎉 **Success!** Your Sybil voice platform is now live and ready for testing!
+🎉 **Success!** Your Mulisa voice platform is now live and ready for testing!

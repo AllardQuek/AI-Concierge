@@ -1,7 +1,7 @@
 {
-  "name": "sybil-server",
+  "name": "mulisa-server",
   "version": "1.0.0",
-  "description": "Sybil AI voice platform - WebRTC signaling server",
+  "description": "Mulisa AI voice platform - WebRTC signaling server",
   "main": "index.js",
   "scripts": {
     "start": "NODE_ENV=production node index.js",
