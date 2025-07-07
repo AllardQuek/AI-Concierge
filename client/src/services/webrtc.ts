@@ -72,6 +72,11 @@ export class WebRTCService {
   // Pending ICE candidates queue (for candidates that arrive before remote description)
   private pendingCandidates: RTCIceCandidateInit[] = [];
 
+  // Enhanced error recovery mechanisms
+  private connectionHealthMonitor: number | null = null;
+  private recoveryAttempts = 0;
+  private maxRecoveryAttempts = 3;
+
   constructor() {
     this.initializePeerConnection();
     this.setupMobileAudioSupport();
@@ -136,6 +141,15 @@ export class WebRTCService {
     this.peerConnection.onconnectionstatechange = () => {
       const state = this.peerConnection?.connectionState || 'disconnected';
       console.log('Connection state:', state);
+      
+      // Start health monitoring when connected
+      if (state === 'connected') {
+        this.startConnectionHealthMonitoring();
+        this.resetRecoveryAttempts();
+      } else {
+        this.stopConnectionHealthMonitoring();
+      }
+      
       if (this.onConnectionStateChangeCallback) {
         this.onConnectionStateChangeCallback(state);
       }
@@ -166,11 +180,8 @@ export class WebRTCService {
         // Log detailed diagnostics on failure
         this.logConnectionDiagnostics().catch(console.error);
         
-        // Attempt ICE restart if available
-        if (this.peerConnection && this.peerConnection.restartIce) {
-          console.log('🔄 Attempting automatic ICE restart...');
-          this.peerConnection.restartIce();
-        }
+        // Use enhanced recovery instead of just ICE restart
+        this.attemptConnectionRecovery().catch(console.error);
       } else if (iceState === 'disconnected') {
         console.log('🟡 ICE disconnected - connection lost, may recover...');
       } else if (iceState === 'closed') {
@@ -621,6 +632,9 @@ export class WebRTCService {
   cleanup(): void {
     console.log('WebRTC: Starting cleanup...');
     
+    // Stop health monitoring
+    this.stopConnectionHealthMonitoring();
+    
     // Stop transcription
     this.stopTranscription();
     
@@ -993,12 +1007,18 @@ export class WebRTCService {
         if (this.operationState.isCreatingOffer) {
           throw new Error('Offer creation already in progress');
         }
-        if (now - this.operationState.lastOfferTimestamp < 1000) {
+        // Reduce rate limiting from 1000ms to 500ms for better responsiveness
+        if (now - this.operationState.lastOfferTimestamp < 500) {
           throw new Error('Too soon after last offer attempt');
         }
+        // Allow offer creation in more states, not just 'stable'
+        if (currentState === 'closed') {
+          console.log(`WebRTC: Cannot create offer in closed state, resetting...`);
+          throw new Error('Peer connection is closed, needs reset');
+        }
+        // Log but don't throw for non-ideal states
         if (currentState !== 'stable') {
-          console.log(`WebRTC: Invalid state for offer creation: ${currentState}, resetting...`);
-          throw new Error('Invalid state for offer creation, connection needs reset');
+          console.log(`WebRTC: Creating offer in non-ideal state: ${currentState}`);
         }
         break;
 
@@ -1006,12 +1026,18 @@ export class WebRTCService {
         if (this.operationState.isCreatingAnswer) {
           throw new Error('Answer creation already in progress');
         }
-        if (now - this.operationState.lastAnswerTimestamp < 1000) {
+        // Reduce rate limiting from 1000ms to 500ms
+        if (now - this.operationState.lastAnswerTimestamp < 500) {
           throw new Error('Too soon after last answer attempt');
         }
+        // Allow answer creation in more states
+        if (currentState === 'closed') {
+          console.log(`WebRTC: Cannot create answer in closed state, resetting...`);
+          throw new Error('Peer connection is closed, needs reset');
+        }
+        // Log but don't throw for non-ideal states
         if (currentState !== 'stable') {
-          console.log(`WebRTC: Invalid state for answer creation: ${currentState}, resetting...`);
-          throw new Error('Invalid state for answer creation, connection needs reset');
+          console.log(`WebRTC: Creating answer in non-ideal state: ${currentState}`);
         }
         break;
 
@@ -1019,12 +1045,16 @@ export class WebRTCService {
         if (this.operationState.isSettingRemoteAnswer) {
           throw new Error('Setting remote answer already in progress');
         }
+        // Allow setting remote answer even if already stable (might be duplicate)
         if (currentState === 'stable') {
           console.log('WebRTC: Already in stable state, remote answer may have been set already');
-          throw new Error('Connection already established');
+          // Don't throw - just log and continue
+          return;
         }
+        // Allow more states for setting remote answer
         if (currentState !== 'have-local-offer') {
-          throw new Error(`Invalid state for setting remote answer: ${currentState}`);
+          console.log(`WebRTC: Setting remote answer in unexpected state: ${currentState}`);
+          // Don't throw - try to proceed anyway
         }
         break;
     }
@@ -1464,7 +1494,9 @@ export class WebRTCService {
 
     console.log(`🔄 Processing ${this.pendingCandidates.length} pending ICE candidates...`);
     
-    // Process all pending candidates
+    // Process all pending candidates with retry logic
+    const failedCandidates: RTCIceCandidateInit[] = [];
+    
     for (const candidate of this.pendingCandidates) {
       try {
         if (this.peerConnection && this.peerConnection.remoteDescription) {
@@ -1476,16 +1508,134 @@ export class WebRTCService {
             const rtcCandidate = new RTCIceCandidate(candidate);
             this.trackIceCandidate(rtcCandidate, false);
           }
+        } else {
+          console.warn('⚠️ Cannot process candidate - no peer connection or remote description');
+          failedCandidates.push(candidate);
         }
       } catch (error) {
         console.error('❌ Failed to process pending ICE candidate:', error);
-        // Continue processing other candidates even if one fails
+        failedCandidates.push(candidate);
       }
     }
     
     // Clear the pending candidates queue
     this.pendingCandidates = [];
+    
+    // Retry failed candidates after a short delay (in case remote description was set late)
+    if (failedCandidates.length > 0) {
+      console.log(`🔄 Retrying ${failedCandidates.length} failed candidates...`);
+      setTimeout(async () => {
+        for (const candidate of failedCandidates) {
+          try {
+            if (this.peerConnection && this.peerConnection.remoteDescription) {
+              await this.peerConnection.addIceCandidate(candidate);
+              console.log('✅ Retry successful for ICE candidate');
+            }
+          } catch (retryError) {
+            console.warn('⚠️ Retry failed for ICE candidate:', retryError);
+          }
+        }
+      }, 1000);
+    }
+    
     console.log('✅ Finished processing pending ICE candidates');
+  }
+
+  // Enhanced error recovery mechanisms
+  private startConnectionHealthMonitoring(): void {
+    if (this.connectionHealthMonitor) {
+      clearInterval(this.connectionHealthMonitor);
+    }
+
+    this.connectionHealthMonitor = setInterval(async () => {
+      if (!this.peerConnection) return;
+
+      const connectionState = this.peerConnection.connectionState;
+      const iceState = this.peerConnection.iceConnectionState;
+
+      // Monitor for connection degradation
+      if (connectionState === 'connected' && iceState === 'disconnected') {
+        console.warn('⚠️ Connection health: ICE disconnected but connection still active');
+        await this.attemptConnectionRecovery();
+      }
+
+      // Monitor for failed connections
+      if (connectionState === 'failed' && this.recoveryAttempts < this.maxRecoveryAttempts) {
+        console.warn('⚠️ Connection health: Connection failed, attempting recovery');
+        await this.attemptConnectionRecovery();
+      }
+
+      // Log connection stats periodically
+      if (connectionState === 'connected') {
+        const stats = await this.getConnectionStats();
+        if (stats && stats.candidates.pairs.length === 0) {
+          console.warn('⚠️ Connection health: Connected but no active candidate pairs');
+        }
+      }
+    }, 10000); // Check every 10 seconds
+  }
+
+  // Stop connection health monitoring
+  private stopConnectionHealthMonitoring(): void {
+    if (this.connectionHealthMonitor) {
+      clearInterval(this.connectionHealthMonitor);
+      this.connectionHealthMonitor = null;
+    }
+  }
+
+  // Enhanced connection recovery with multiple strategies
+  private async attemptConnectionRecovery(): Promise<void> {
+    if (this.recoveryAttempts >= this.maxRecoveryAttempts) {
+      console.log('🛑 Max recovery attempts reached, giving up');
+      return;
+    }
+
+    this.recoveryAttempts++;
+    console.log(`🔄 Attempting connection recovery (attempt ${this.recoveryAttempts}/${this.maxRecoveryAttempts})`);
+
+    if (!this.peerConnection) return;
+
+    try {
+      // Strategy 1: ICE restart (if available)
+      if (this.peerConnection.restartIce) {
+        console.log('🔄 Strategy 1: Attempting ICE restart...');
+        this.peerConnection.restartIce();
+        
+        // Wait a bit to see if ICE restart helps
+        await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        if (this.peerConnection.connectionState === 'connected') {
+          console.log('✅ ICE restart successful');
+          this.recoveryAttempts = 0; // Reset counter on success
+          return;
+        }
+      }
+
+      // Strategy 2: Recreate peer connection (nuclear option)
+      if (this.recoveryAttempts >= 2) {
+        console.log('🔄 Strategy 2: Recreating peer connection...');
+        await this.resetPeerConnection();
+        
+        // Wait for reconnection
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        if (this.peerConnection?.connectionState === 'connected') {
+          console.log('✅ Peer connection recreation successful');
+          this.recoveryAttempts = 0;
+          return;
+        }
+      }
+
+      console.log(`⚠️ Recovery attempt ${this.recoveryAttempts} failed`);
+      
+    } catch (error) {
+      console.error('❌ Connection recovery failed:', error);
+    }
+  }
+
+  // Reset recovery attempts counter (call when connection is healthy)
+  private resetRecoveryAttempts(): void {
+    this.recoveryAttempts = 0;
   }
 }
 

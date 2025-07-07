@@ -275,6 +275,25 @@ const LandingPage: React.FC = () => {
     };
   }, []);
 
+  useEffect(() => {
+    if (!socketRef.current) return;
+
+    const handleSocketDisconnect = () => {
+      console.log('🔌 Socket disconnected, cleaning up call state');
+      cleanup();
+      setCallState('idle');
+      setError('Connection lost. Please try again.');
+      updateCurrentCallPartner('');
+    };
+
+    socketRef.current.on('disconnect', handleSocketDisconnect);
+
+    // Clean up listener on unmount
+    return () => {
+      socketRef.current?.off('disconnect', handleSocketDisconnect);
+    };
+  }, []);
+
   // Auto-cleanup when call returns to idle after being connected
   useEffect(() => {
     // This effect ensures proper cleanup when transitioning from connected to idle
