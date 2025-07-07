@@ -168,13 +168,12 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                 </span>
               </div>
             </div>
-            <div className="flex gap-4">
+            <div className="flex gap-2">
               <Button
                 onClick={onMute}
                 variant={isMuted ? "danger" : "secondary"}
                 size="large"
-                fullWidth
-                className="flex items-center justify-center gap-2"
+                className="flex-1 flex items-center justify-center gap-2"
               >
                 {isMuted ? '🔇 Unmute' : '🔊 Mute'}
               </Button>
@@ -182,9 +181,8 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                 onClick={onToggleTranscription}
                 variant={showTranscription ? "primary" : "secondary"}
                 size="large"
-                fullWidth
                 disabled={isTranscriptionLoading}
-                className="flex items-center justify-center gap-2"
+                className="flex-1 flex items-center justify-center gap-2"
               >
                 {isTranscriptionLoading ? (
                   <>
@@ -201,8 +199,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                 onClick={onEndCall}
                 variant="danger"
                 size="large"
-                fullWidth
-                className="flex items-center justify-center gap-2"
+                className="flex-1 flex items-center justify-center gap-2"
               >
                 📞 End Call
               </Button>
