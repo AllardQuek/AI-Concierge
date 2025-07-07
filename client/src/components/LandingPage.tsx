@@ -15,7 +15,6 @@ type CallState = 'idle' | 'outgoing' | 'incoming' | 'connected';
 const LandingPage: React.FC = () => {
   const [friendNumber, setFriendNumber] = useState('');
   const [myNumber, setMyNumber] = useState('');
-  const [isGeneratingNumber, setIsGeneratingNumber] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [callState, setCallState] = useState<CallState>('idle');
   const [currentCallPartner, setCurrentCallPartner] = useState('');
@@ -863,34 +862,6 @@ const LandingPage: React.FC = () => {
     }
   };
 
-  const refreshMyNumber = async () => {
-    setIsGeneratingNumber(true);
-    
-    // Clear current session number
-    const currentSessionKeys = Object.keys(sessionStorage).filter(key => key.startsWith('mulisa-user-number-'));
-    currentSessionKeys.forEach(key => sessionStorage.removeItem(key));
-    
-    // Generate new number for this session
-    await new Promise(resolve => setTimeout(resolve, 500)); // Small delay for UX
-    const newNumber = generateMyNumber();
-    setMyNumber(newNumber);
-    setIsGeneratingNumber(false);
-    
-    // Reconnect with new number
-    if (socketRef.current) {
-      socketRef.current.disconnect();
-      try {
-        await socketRef.current.connect();
-        socketRef.current.joinRoom(newNumber);
-        setIsConnected(true);
-        console.log(`🔄 Reconnected with new number: ${newNumber}`);
-      } catch (error) {
-        console.error('Failed to reconnect with new number:', error);
-        setIsConnected(false);
-      }
-    }
-  };
-
   // Simple phone number validation - just check if we have enough digits
   const validatePhoneNumber = (phoneNumber: string): { isValid: boolean, message: string } => {
     if (!phoneNumber.trim()) {
@@ -947,9 +918,7 @@ const LandingPage: React.FC = () => {
           </div>
           <MyNumber
             myNumber={myNumber}
-            isGeneratingNumber={isGeneratingNumber}
             onCopy={copyMyNumber}
-            onRefresh={refreshMyNumber}
           />
           <StatusIndicator isConnected={isConnected} />
           <div className="mt-6">
