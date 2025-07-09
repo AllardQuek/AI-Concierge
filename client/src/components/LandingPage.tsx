@@ -16,8 +16,26 @@ type CallState = 'idle' | 'outgoing' | 'incoming' | 'connected';
 
 // Deterministic room name for 1:1 calls (digits only, no + or spaces)
 function getRoomName(numberA: string, numberB: string): string {
-  const cleanA = numberA.replace(/\D/g, '');
-  const cleanB = numberB.replace(/\D/g, '');
+  // Normalize both numbers to ensure consistent room naming
+  const normalizeForRoom = (phoneNumber: string): string => {
+    const digitsOnly = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
+    
+    // Handle 8-digit Singapore mobile numbers (without country code)
+    if (digitsOnly.length === 8 && (digitsOnly.startsWith('8') || digitsOnly.startsWith('9'))) {
+      return `65${digitsOnly}`; // Add 65 prefix for consistency
+    }
+    
+    // Handle numbers that already have 65 prefix
+    if (digitsOnly.startsWith('65') && digitsOnly.length === 10) {
+      return digitsOnly;
+    }
+    
+    // Return as-is if we can't normalize
+    return digitsOnly;
+  };
+  
+  const cleanA = normalizeForRoom(numberA);
+  const cleanB = normalizeForRoom(numberB);
   const [first, second] = [cleanA, cleanB].sort();
   return `room-${first}-${second}`;
 }
@@ -814,17 +832,86 @@ const LandingPage: React.FC = () => {
     // Handle remote audio tracks
     let remoteAudioEl: HTMLAudioElement | null = null;
     room.on('trackSubscribed', (track) => {
+      console.log('🎵 Track subscribed:', track.kind, 'from source:', track.source);
+      
       if (track.kind === 'audio') {
+        console.log('🎤 Audio track received, setting up playback...');
+        
         // Detach previous audio if any
         if (remoteAudioEl) {
-          try { remoteAudioEl.srcObject = null; } catch {}
-          remoteAudioEl.remove();
+          try { 
+            console.log('🔄 Detaching previous audio element');
+            remoteAudioEl.srcObject = null; 
+            remoteAudioEl.remove(); 
+          } catch (err) {
+            console.warn('⚠️ Error detaching previous audio:', err);
+          }
         }
-        const audioElement = track.attach();
-        audioElement.autoplay = true;
-        audioElement.play();
-        remoteAudioEl = audioElement;
-        document.body.appendChild(audioElement); // For quick testing; you can manage this in the UI if desired
+        
+        try {
+          const audioElement = track.attach();
+          console.log('🔗 Audio element attached:', audioElement);
+          
+          // Configure audio element for optimal playback
+          audioElement.autoplay = true;
+          audioElement.volume = 1.0;
+          audioElement.muted = false;
+          
+          // Add event listeners for debugging
+          audioElement.onloadedmetadata = () => {
+            console.log('✅ Audio metadata loaded, duration:', audioElement.duration);
+          };
+          
+          audioElement.oncanplay = () => {
+            console.log('✅ Audio can play, attempting playback...');
+          };
+          
+          audioElement.onplay = () => {
+            console.log('🎵 Audio playback started successfully');
+          };
+          
+          audioElement.onerror = (e) => {
+            console.error('❌ Audio playback error:', e);
+          };
+          
+          // Attempt to play the audio
+          const playPromise = audioElement.play();
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => {
+                console.log('🎵 Audio playback started successfully');
+              })
+              .catch((error) => {
+                console.error('❌ Failed to play audio:', error);
+                // Try again after user interaction
+                document.addEventListener('click', () => {
+                  audioElement.play().catch(err => console.error('❌ Still failed to play:', err));
+                }, { once: true });
+              });
+          }
+          
+          remoteAudioEl = audioElement;
+          document.body.appendChild(audioElement);
+          console.log('✅ Remote audio element added to DOM');
+          
+        } catch (error) {
+          console.error('❌ Error setting up audio playback:', error);
+        }
+      }
+    });
+    
+    // Handle track unsubscription
+    room.on('trackUnsubscribed', (track) => {
+      console.log('🔇 Track unsubscribed:', track.kind, 'from source:', track.source);
+      if (track.kind === 'audio' && remoteAudioEl) {
+        try {
+          remoteAudioEl.srcObject = null;
+          remoteAudioEl.remove();
+          remoteAudioEl = null;
+          console.log('✅ Remote audio element cleaned up');
+        } catch (err) {
+          console.warn('⚠️ Error cleaning up audio element:', err);
+        }
       }
     });
     // Clean up remote audio on disconnect
