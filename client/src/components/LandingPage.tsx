@@ -52,11 +52,13 @@ const LandingPage: React.FC = () => {
   const callDurationIntervalRef = useRef<number | null>(null);
   const localAudioRef = useRef<HTMLAudioElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
-
   const [showTranscription, setShowTranscription] = useState(false);
   const [transcripts, setTranscripts] = useState<TranscriptionResult[]>([]);
   const [isTranscriptionLoading, setIsTranscriptionLoading] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string>('');
+
+  // Oracle Control Panel state
+  const [showOracle, setShowOracle] = useState(false);
 
   const [livekitCallState, setLivekitCallState] = useState<'idle' | 'outgoing' | 'incoming' | 'connected'>('idle');
   const [livekitCallPartner, setLivekitCallPartner] = useState('');
@@ -1047,6 +1049,10 @@ const LandingPage: React.FC = () => {
     setShowTranscription(!showTranscription);
   };
 
+  const toggleOracle = () => {
+    setShowOracle(!showOracle);
+  };
+
   const cleanup = () => {
     console.log('🧹 Cleaning up call services...');
     
@@ -1209,16 +1215,18 @@ const LandingPage: React.FC = () => {
             onMute={toggleMute}
             onEndCall={endCall}
             onAnswer={handleAnswerCall}
-            onDecline={handleDeclineCall}
-            onRetry={recoverFromError}
+            onDecline={handleDeclineCall}            onRetry={recoverFromError}
                 showTranscription={showTranscription}
                 onToggleTranscription={toggleTranscription}
                 transcripts={transcripts}
                 isTranscriptionLoading={isTranscriptionLoading}
                 transcriptionError={transcriptionError}
+                showOracle={showOracle}
+                onToggleOracle={toggleOracle}
+                roomId={getRoomName(myNumber, currentCallPartner)}
+                participantName={myNumber}
           />
-        )}
-        {livekitCallState !== 'idle' && (
+        )}        {livekitCallState !== 'idle' && (
           <CallInterface
             callState={livekitCallState as CallInterfaceState}
             error={error}
@@ -1239,6 +1247,10 @@ const LandingPage: React.FC = () => {
             transcripts={transcripts}
             isTranscriptionLoading={isTranscriptionLoading}
             transcriptionError={transcriptionError}
+            showOracle={showOracle}
+            onToggleOracle={toggleOracle}
+            roomId={getRoomName(myNumber, livekitCallPartner)}
+            participantName={myNumber}
           />
         )}
         {/* Audio Elements */}

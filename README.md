@@ -155,7 +155,7 @@ VITE_LIVEKIT_TOKEN_URL=https://your-production-server.com/api/get-livekit-token
 
 **Key Variables:**
 - `VITE_SERVER_URL`: Main backend server URL for signaling and API calls
-- `VITE_BOT_SERVER_URL`: Bot management server URL for AI oracle invitations
+- `VITE_BOT_SERVER_URL`: Oracle bot server URL for AI oracle invitations and management
 - `VITE_LIVEKIT_*`: LiveKit configuration for advanced voice features
 
 ### Server Environment Variables
@@ -167,6 +167,35 @@ PORT=3001                           # Server port (default: 3001)
 NODE_ENV=development                # Environment mode
 ALLOWED_ORIGINS=http://localhost:3000,https://yourdomain.com  # CORS origins
 ```
+
+### Oracle Bot Environment Variables
+
+The Oracle AI bot requires additional configuration:
+
+**Development (`.env.local`):**
+```bash
+# Core LiveKit Configuration
+LIVEKIT_URL=wss://your-livekit-server-url
+LIVEKIT_API_KEY=your-livekit-api-key
+LIVEKIT_API_SECRET=your-livekit-api-secret
+
+# Oracle AI Configuration
+OPENAI_API_KEY=your-openai-api-key-here
+LIVEKIT_BOT_IDENTITY=mulisa-oracle
+ORACLE_PERSONALITY=mystical-sage
+WISDOM_FREQUENCY=moderate
+ENABLE_TTS=false
+
+# Bot Server Configuration
+BOT_PORT=4000
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+```
+
+**Key Oracle Variables:**
+- `OPENAI_API_KEY`: Required for Oracle AI wisdom generation
+- `LIVEKIT_BOT_IDENTITY`: Bot identity in LiveKit rooms (default: mulisa-oracle)
+- `ORACLE_PERSONALITY`: Oracle personality style (default: mystical-sage)
+- `ENABLE_TTS`: Enable text-to-speech audio injection (requires OpenAI API)
 
 ## 🌐 Deployment
 
@@ -275,3 +304,77 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - Socket.IO for real-time signaling
 - React and TypeScript for robust frontend development
 - Tailwind CSS for modern styling
+
+## 🔮 Oracle AI Features
+
+Mulisa includes an AI-powered Oracle system that provides mystical wisdom and guidance during conversations:
+
+### Oracle Capabilities
+- **Real-time Wisdom Generation**: GPT-4 powered prophetic insights based on conversation context
+- **Voice Injection**: Text-to-speech audio that plays directly in the voice call
+- **Natural Conversation Flow**: Oracle listens and provides guidance at appropriate moments
+- **Mystical Personality**: Ancient wisdom with modern relevance and oracular speech patterns
+
+### Oracle Integration
+- **Frontend Controls**: Dedicated Oracle panel with summon/dismiss functionality
+- **Audio Playback**: Automatic TTS audio playback when Oracle speaks
+- **Status Indicators**: Real-time Oracle active/inactive status
+- **Wisdom History**: Display of latest Oracle guidance and insights
+
+### Technical Architecture
+- **LiveKit Integration**: Oracle joins as a bot participant with audio publishing capabilities
+- **OpenAI GPT-4**: Powers wisdom generation with conversation context awareness
+- **TTS Audio Pipeline**: OpenAI text-to-speech with mystical voice configuration
+- **Hybrid Audio Delivery**: Direct LiveKit tracks + HTTP serving fallback for maximum compatibility
+
+### Getting Started with Oracle
+1. Set up OpenAI API key in bot environment configuration
+2. Start the Oracle bot server (`npm start` in `/bot` directory)
+3. Use the Oracle controls in the call interface to summon wisdom
+4. Oracle will listen to conversation and provide guidance when appropriate
+
+## 🚀 Quick Start
+
+### 1. **Install Dependencies**
+```bash
+# Install all dependencies (client, server, and Oracle bot)
+npm run install:all
+```
+
+### 2. **Environment Setup**
+
+#### Client Environment (`.env.local` in `/client/`)
+```bash
+VITE_SERVER_URL=http://localhost:3001
+VITE_BOT_SERVER_URL=http://localhost:4000
+```
+
+#### Oracle Bot Environment (`.env.local` in `/bot/`)
+```bash
+# Copy from template
+cp bot/.env.example bot/.env.local
+
+# Edit with your OpenAI API key
+OPENAI_API_KEY=your-openai-api-key-here
+LIVEKIT_URL=wss://your-livekit-server-url
+LIVEKIT_API_KEY=your-livekit-api-key
+LIVEKIT_API_SECRET=your-livekit-api-secret
+```
+
+### 3. **Start the Application**
+```bash
+# Option 1: Start everything together
+npm run dev
+
+# Option 2: Start components individually
+npm run server:dev    # Signaling server (port 3001)
+npm run client:dev     # React app (port 3000)
+cd bot && npm start    # Oracle bot (port 4000)
+```
+
+### 4. **Test Voice + Oracle Features**
+1. **Open browser** to `http://localhost:3000`
+2. **Grant microphone permissions** when prompted
+3. **Start a voice call** between two browser windows/devices
+4. **Summon the Oracle** using the Oracle control panel
+5. **Experience AI-powered mystical guidance** during your conversation
