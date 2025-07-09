@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import React, { useState, useEffect, useRef } from 'react';
 import { SocketService } from '../services/socket';
 import { WebRTCService } from '../services/webrtc';
@@ -9,8 +10,17 @@ import MyNumber from './shared/MyNumber.tsx';
 import StatusIndicator from './shared/StatusIndicator.tsx';
 import Instructions from './shared/Instructions.tsx';
 import Footer from './shared/Footer.tsx';
+import { Room, createLocalAudioTrack } from 'livekit-client';
 
 type CallState = 'idle' | 'outgoing' | 'incoming' | 'connected';
+
+// Deterministic room name for 1:1 calls (digits only, no + or spaces)
+function getRoomName(numberA: string, numberB: string): string {
+  const cleanA = numberA.replace(/\D/g, '');
+  const cleanB = numberB.replace(/\D/g, '');
+  const [first, second] = [cleanA, cleanB].sort();
+  return `room-${first}-${second}`;
+}
 
 const LandingPage: React.FC = () => {
   const [friendNumber, setFriendNumber] = useState('');
@@ -47,6 +57,12 @@ const LandingPage: React.FC = () => {
   const [transcripts, setTranscripts] = useState<TranscriptionResult[]>([]);
   const [isTranscriptionLoading, setIsTranscriptionLoading] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string>('');
+
+  const [livekitCallState, setLivekitCallState] = useState<'idle' | 'outgoing' | 'incoming' | 'connected'>('idle');
+  const [livekitCallPartner, setLivekitCallPartner] = useState('');
+  const [participants, setParticipants] = useState<Array<{ identity: string; isBot: boolean }>>([]);
+  const [isInvitingBot, setIsInvitingBot] = useState(false);
+  const liveKitRoomRef = useRef<Room | null>(null);
 
   // Handle phone number input with filtering
   const handlePhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -308,6 +324,54 @@ const LandingPage: React.FC = () => {
   useEffect(() => {
     setConnectionStats(connectionStatsRef.current);
   }, [connectionStatsRef.current]);
+
+  // LiveKit call signaling handlers
+  useEffect(() => {
+    if (!socketRef.current) return;
+    // Incoming LiveKit call
+    const onUserCallingLivekit = ({ callerCode }: { callerCode: string }) => {
+      setLivekitCallPartner(callerCode);
+      setLivekitCallState('incoming');
+    };
+    // Call accepted by callee
+    const onCallAcceptedLivekit = ({ calleeCode }: { calleeCode: string }) => {
+      joinLiveKitRoom(calleeCode);
+      setLivekitCallState('connected');
+      startCallDurationTimer();
+    };
+    // Call declined by callee
+    const onCallDeclinedLivekit = () => {
+      setLivekitCallState('idle');
+      setLivekitCallPartner('');
+      setError('Call was declined');
+      stopCallDurationTimer();
+    };
+    
+    // Bot invitation state handlers
+    const onBotInvitationStarted = () => {
+      console.log('🤖 Bot invitation started by other participant');
+      setIsInvitingBot(true);
+    };
+    
+    const onBotInvitationCompleted = () => {
+      console.log('🤖 Bot invitation completed');
+      setIsInvitingBot(false);
+    };
+    
+    (socketRef.current as any).on('user-calling-livekit', onUserCallingLivekit);
+    (socketRef.current as any).on('call-accepted-livekit', onCallAcceptedLivekit);
+    (socketRef.current as any).on('call-declined-livekit', onCallDeclinedLivekit);
+    (socketRef.current as any).on('bot-invitation-started', onBotInvitationStarted);
+    (socketRef.current as any).on('bot-invitation-completed', onBotInvitationCompleted);
+    
+    return () => {
+      (socketRef.current as any)?.off('user-calling-livekit', onUserCallingLivekit);
+      (socketRef.current as any)?.off('call-accepted-livekit', onCallAcceptedLivekit);
+      (socketRef.current as any)?.off('call-declined-livekit', onCallDeclinedLivekit);
+      (socketRef.current as any)?.off('bot-invitation-started', onBotInvitationStarted);
+      (socketRef.current as any)?.off('bot-invitation-completed', onBotInvitationCompleted);
+    };
+  }, [socketRef.current]);
 
   const startRingingEffect = () => {
     // Try to vibrate on mobile devices
@@ -644,6 +708,184 @@ const LandingPage: React.FC = () => {
     }
   };
 
+  const handleCallViaLiveKit = async () => {
+    if (!friendNumber.trim()) return;
+    if (callState !== 'idle' || livekitCallState !== 'idle') {
+      setError('Cannot start a new call while another call is in progress.');
+      return;
+    }
+    // Signal B via Socket.IO
+    socketRef.current?.emit('call-user-livekit', {
+      targetCode: friendNumber,
+      callerCode: myNumber,
+    });
+    setLivekitCallPartner(friendNumber);
+    setLivekitCallState('outgoing');
+  };
+
+  const handleAcceptLiveKitCall = async () => {
+    socketRef.current?.emit('accept-call-livekit', { callerCode: livekitCallPartner, calleeCode: myNumber });
+    await joinLiveKitRoom(livekitCallPartner);
+    setLivekitCallState('connected');
+    startCallDurationTimer();
+  };
+
+  const handleDeclineLiveKitCall = () => {
+    socketRef.current?.emit('decline-call-livekit', { callerCode: livekitCallPartner, calleeCode: myNumber });
+    setLivekitCallState('idle');
+    setLivekitCallPartner('');
+    stopCallDurationTimer();
+  };
+
+  const handleEndLiveKitCall = () => {
+    liveKitRoomRef.current?.disconnect();
+    socketRef.current?.emit('end-call-livekit', {
+      targetCode: livekitCallPartner,
+      fromCode: myNumber,
+    });
+    setLivekitCallState('idle');
+    setLivekitCallPartner('');
+    setParticipants([]);
+    setIsInvitingBot(false);
+    stopCallDurationTimer();
+  };
+
+  useEffect(() => {
+    if (!socketRef.current) return;
+    const onCallEndedLivekit = () => {
+      liveKitRoomRef.current?.disconnect();
+      setLivekitCallState('idle');
+      setLivekitCallPartner('');
+      setParticipants([]);
+      setIsInvitingBot(false);
+      setError('Call ended by other party');
+      stopCallDurationTimer();
+    };
+    (socketRef.current as any).on('call-ended-livekit', onCallEndedLivekit);
+    return () => {
+      (socketRef.current as any)?.off('call-ended-livekit', onCallEndedLivekit);
+    };
+  }, [socketRef.current]);
+
+  const joinLiveKitRoom = async (otherNumber: string) => {
+    const livekitUrl = import.meta.env.VITE_LIVEKIT_URL;
+    const tokenApiUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
+    const roomName = getRoomName(myNumber, otherNumber);
+    const identity = myNumber;
+    const response = await fetch(`${tokenApiUrl}?room=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(identity)}`);
+    const { token } = await response.json();
+    const room = new Room();
+    await room.connect(livekitUrl, token);
+    const audioTrack = await createLocalAudioTrack();
+    await room.localParticipant.publishTrack(audioTrack);
+    liveKitRoomRef.current = room;
+    
+    // Initialize participants list with current participants
+    const updateParticipantsList = () => {
+      const participantsList = Array.from(room.remoteParticipants.values()).map(p => ({
+        identity: p.identity,
+        isBot: p.identity.includes('bot') || p.identity.includes('mulisa')
+      }));
+      
+      // Add local participant
+      participantsList.push({
+        identity: room.localParticipant.identity,
+        isBot: false
+      });
+      
+      console.log('👥 Participants updated:', participantsList);
+      setParticipants(participantsList);
+    };
+    
+    // Track participant events
+    room.on('participantConnected', (participant) => {
+      console.log('👋 Participant connected:', participant.identity);
+      updateParticipantsList();
+    });
+    
+    room.on('participantDisconnected', (participant) => {
+      console.log('👋 Participant disconnected:', participant.identity);
+      updateParticipantsList();
+    });
+    
+    // Initial participants update
+    updateParticipantsList();
+    
+    // Handle remote audio tracks
+    let remoteAudioEl: HTMLAudioElement | null = null;
+    room.on('trackSubscribed', (track) => {
+      if (track.kind === 'audio') {
+        // Detach previous audio if any
+        if (remoteAudioEl) {
+          try { remoteAudioEl.srcObject = null; } catch {}
+          remoteAudioEl.remove();
+        }
+        const audioElement = track.attach();
+        audioElement.autoplay = true;
+        audioElement.play();
+        remoteAudioEl = audioElement;
+        document.body.appendChild(audioElement); // For quick testing; you can manage this in the UI if desired
+      }
+    });
+    // Clean up remote audio on disconnect
+    room.on('disconnected', () => {
+      console.log('🔌 Room disconnected, clearing participants');
+      setParticipants([]);
+      setIsInvitingBot(false);
+      if (remoteAudioEl) {
+        try { remoteAudioEl.srcObject = null; } catch {}
+        remoteAudioEl.remove();
+        remoteAudioEl = null;
+      }
+    });
+    // Optionally: handle remote tracks, update UI, etc.
+  };
+
+  // Function to trigger bot to join the room
+  const inviteBotToCall = async () => {
+    if (livekitCallState !== 'connected' || !livekitCallPartner) {
+      console.warn('Cannot invite bot: no active LiveKit call');
+      return;
+    }
+
+    if (isInvitingBot) {
+      console.warn('Bot invite already in progress');
+      return;
+    }
+
+    // Notify other participants that bot invitation is starting
+    socketRef.current?.emit('bot-invitation-started', {
+      roomParticipants: [myNumber, livekitCallPartner]
+    });
+    
+    setIsInvitingBot(true);
+    
+    try {
+      const botServerUrl = import.meta.env.VITE_BOT_SERVER_URL || 'http://localhost:4000';
+      console.log('🤖 Using bot server URL:', botServerUrl);
+      
+      const response = await fetch(`${botServerUrl}/join-room?number1=${encodeURIComponent(myNumber)}&number2=${encodeURIComponent(livekitCallPartner)}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        console.log('🤖 Bot invited successfully:', result.message);
+        // The bot should appear in the participants list automatically via the room events
+      } else {
+        console.error('❌ Failed to invite bot:', result.error);
+        setError(`Failed to invite AI Oracle: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('❌ Error inviting bot:', error);
+      setError('Failed to invite AI Oracle. Please try again.');
+    } finally {
+      // Notify other participants that bot invitation is completed
+      socketRef.current?.emit('bot-invitation-completed', {
+        roomParticipants: [myNumber, livekitCallPartner]
+      });
+      setIsInvitingBot(false);
+    }
+  };
+
   const initiateCall = async (targetNumber: string) => {
     try {
       if (!webrtcRef.current || !socketRef.current) throw new Error('Services not initialized');
@@ -935,13 +1177,14 @@ const LandingPage: React.FC = () => {
             onChange={handlePhoneNumberChange}
             onKeyPress={handlePhoneNumberKeyPress}
             onCall={handleCallFriend}
+            onCallLiveKit={handleCallViaLiveKit}
           />
           <div className="relative my-8">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200"></div>
+              <div className="w-full border-t border-gray-400"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-500">OR</span>
+              <span className="px-4 bg-white text-gray-500"></span>
             </div>
           </div>
           <MyNumber
@@ -968,11 +1211,34 @@ const LandingPage: React.FC = () => {
             onAnswer={handleAnswerCall}
             onDecline={handleDeclineCall}
             onRetry={recoverFromError}
-                                            showTranscription={showTranscription}
+                showTranscription={showTranscription}
                 onToggleTranscription={toggleTranscription}
                 transcripts={transcripts}
                 isTranscriptionLoading={isTranscriptionLoading}
                 transcriptionError={transcriptionError}
+          />
+        )}
+        {livekitCallState !== 'idle' && (
+          <CallInterface
+            callState={livekitCallState as CallInterfaceState}
+            error={error}
+            isMuted={isMuted}
+            callDuration={callDuration}
+            currentCallPartner={livekitCallPartner}
+            isRinging={isRinging}
+            participants={participants}
+            onMute={toggleMute}
+            onEndCall={handleEndLiveKitCall}
+            onAnswer={handleAcceptLiveKitCall}
+            onDecline={handleDeclineLiveKitCall}
+            onRetry={recoverFromError}
+            onInviteBot={inviteBotToCall}
+            isInvitingBot={isInvitingBot}
+            showTranscription={showTranscription}
+            onToggleTranscription={toggleTranscription}
+            transcripts={transcripts}
+            isTranscriptionLoading={isTranscriptionLoading}
+            transcriptionError={transcriptionError}
           />
         )}
         {/* Audio Elements */}

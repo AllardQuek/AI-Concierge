@@ -4,7 +4,7 @@ const dotenv = require('dotenv');
 
 // Load environment variables based on NODE_ENV (standardized with client approach)
 function loadEnvironment() {
-  const nodeEnv = process.env.NODE_ENV || 'development';
+  const nodeEnv = process.env.NODE_ENV || 'local';
   
   // Primary environment file (e.g., .env.production, .env.development)
   const primaryEnvFile = `.env.${nodeEnv}`;
