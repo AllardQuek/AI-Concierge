@@ -1,9 +1,15 @@
 import React from 'react';
 import { Button, ConnectionStatus, ErrorMessage } from './shared';
 import TranscriptionPanel from './TranscriptionPanel';
+import ParticipantsList from './ParticipantsList';
 import { TranscriptionResult } from '../services/types';
 
 export type CallState = 'idle' | 'outgoing' | 'incoming' | 'connected';
+
+interface Participant {
+  identity: string;
+  isBot: boolean;
+}
 
 interface CallInterfaceProps {
   callState: CallState;
@@ -12,11 +18,14 @@ interface CallInterfaceProps {
   callDuration: number;
   currentCallPartner: string;
   isRinging?: boolean;
+  participants?: Participant[];
   onMute: () => void;
   onEndCall: () => void;
   onAnswer: () => void;
   onDecline: () => void;
   onRetry: () => void;
+  onInviteBot?: () => void;
+  isInvitingBot?: boolean;
   // Transcription
   showTranscription: boolean;
   onToggleTranscription: () => void;
@@ -32,11 +41,14 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
   callDuration,
   currentCallPartner,
   isRinging,
+  participants = [],
   onMute,
   onEndCall,
   onAnswer,
   onDecline,
   onRetry,
+  onInviteBot,
+  isInvitingBot = false,
   showTranscription,
   onToggleTranscription,
   transcripts,
@@ -162,11 +174,19 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                 {currentCallPartner}
               </p>
               {/* Call Duration */}
-              <div className="inline-flex items-center px-3 py-1 bg-green-50 border border-green-200 rounded-full">
+              <div className="inline-flex items-center px-3 py-1 bg-green-50 border border-green-200 rounded-full mb-3">
                 <span className="text-sm font-mono text-green-700">
                   ⏱️ {formatCallDuration(callDuration)}
                 </span>
               </div>
+              
+              {/* Participants List */}
+              {participants.length > 0 && (
+                <ParticipantsList 
+                  participants={participants} 
+                  className="mb-4"
+                />
+              )}
             </div>
             <div className="flex gap-2">
               <Button
@@ -204,6 +224,31 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                 📞 End Call
               </Button>
             </div>
+            
+            {/* AI Oracle Invite Button */}
+            {onInviteBot && !participants.some(p => p.isBot) && (
+              <div className="mt-3">
+                <Button
+                  onClick={onInviteBot}
+                  variant="primary"
+                  size="large"
+                  fullWidth
+                  disabled={isInvitingBot}
+                  className="flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isInvitingBot ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                      Inviting AI Oracle...
+                    </>
+                  ) : (
+                    <>
+                      ✨ Invite AI Oracle to Call
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
             {/* Transcription Error */}
             {transcriptionError && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">

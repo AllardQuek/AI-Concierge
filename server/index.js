@@ -416,6 +416,33 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Bot invitation coordination
+  socket.on('bot-invitation-started', ({ roomParticipants }) => {
+    console.log('🤖 Bot invitation started by', socket.id, 'for room participants:', roomParticipants);
+    
+    // Notify all other participants in the room
+    roomParticipants.forEach(participantCode => {
+      const participantSocketId = peerCodeMap.get(participantCode);
+      if (participantSocketId && participantSocketId !== socket.id) {
+        console.log(`📡 Notifying ${participantCode} (${participantSocketId}) about bot invitation start`);
+        io.to(participantSocketId).emit('bot-invitation-started');
+      }
+    });
+  });
+
+  socket.on('bot-invitation-completed', ({ roomParticipants }) => {
+    console.log('🤖 Bot invitation completed by', socket.id, 'for room participants:', roomParticipants);
+    
+    // Notify all other participants in the room
+    roomParticipants.forEach(participantCode => {
+      const participantSocketId = peerCodeMap.get(participantCode);
+      if (participantSocketId && participantSocketId !== socket.id) {
+        console.log(`📡 Notifying ${participantCode} (${participantSocketId}) about bot invitation completion`);
+        io.to(participantSocketId).emit('bot-invitation-completed');
+      }
+    });
+  });
+
   // Handle user disconnect
   socket.on('disconnect', () => {
     const timestamp = new Date().toISOString();

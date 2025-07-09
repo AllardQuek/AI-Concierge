@@ -127,6 +127,47 @@ PORT=8000 npm run server:dev
 ### Client Configuration
 The client connects to `http://localhost:3001` by default. To change the server URL, modify the `SocketService` constructor in `client/src/services/socket.ts`.
 
+## ⚙️ Environment Variables
+
+### Client Environment Variables
+
+The client uses Vite environment variables (prefixed with `VITE_`):
+
+**Development (`.env.local`):**
+```bash
+VITE_SERVER_URL=http://localhost:3001
+VITE_BOT_SERVER_URL=http://localhost:4000
+VITE_LIVEKIT_URL=wss://your-livekit-url
+VITE_LIVEKIT_API_KEY=your-api-key
+VITE_LIVEKIT_API_SECRET=your-api-secret
+VITE_LIVEKIT_TOKEN_URL=${VITE_SERVER_URL}/api/get-livekit-token
+```
+
+**Production (`.env.production`):**
+```bash
+VITE_SERVER_URL=https://your-production-server.com
+VITE_BOT_SERVER_URL=https://your-bot-server.com
+VITE_LIVEKIT_URL=wss://your-livekit-url
+VITE_LIVEKIT_API_KEY=your-api-key
+VITE_LIVEKIT_API_SECRET=your-api-secret
+VITE_LIVEKIT_TOKEN_URL=https://your-production-server.com/api/get-livekit-token
+```
+
+**Key Variables:**
+- `VITE_SERVER_URL`: Main backend server URL for signaling and API calls
+- `VITE_BOT_SERVER_URL`: Bot management server URL for AI oracle invitations
+- `VITE_LIVEKIT_*`: LiveKit configuration for advanced voice features
+
+### Server Environment Variables
+
+The server can be configured via environment variables:
+
+```bash
+PORT=3001                           # Server port (default: 3001)
+NODE_ENV=development                # Environment mode
+ALLOWED_ORIGINS=http://localhost:3000,https://yourdomain.com  # CORS origins
+```
+
 ## 🌐 Deployment
 
 Ready to deploy your Mulisa voice platform? We support both free and paid hosting options.
