@@ -23,6 +23,7 @@ const socketIo = require('socket.io');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const { attachAzureTranscriptionService, getConversationTranscripts, getAllConversationSummaries } = require('./azure-transcription-service');
+const { AccessToken } = require('livekit-server-sdk');
 
 const app = express();
 const server = http.createServer(app);
@@ -152,6 +153,33 @@ app.get('/debug/sockets', (req, res) => {
       targetExists: peerCodeMap.has(data.targetCode)
     }))
   });
+});
+
+// LiveKit token endpoint
+app.get('/api/get-livekit-token', async (req, res) => {
+  const { room, identity } = req.query;
+  const apiKey = process.env.LIVEKIT_API_KEY;
+  const apiSecret = process.env.LIVEKIT_API_SECRET;
+  console.log('API KEY:', apiKey);
+  console.log('API SECRET:', apiSecret);
+  console.log('Room:', room, 'Identity:', identity);
+
+  if (!apiKey || !apiSecret) {
+    return res.status(500).send('API key/secret not set');
+  }
+  if (!room || !identity) {
+    return res.status(400).send('Missing room or identity');
+  }
+  try {
+    const at = new AccessToken(apiKey, apiSecret, { identity });
+    at.addGrant({ roomJoin: true, room });
+    const token = await at.toJwt();
+    console.log('Generated token:', token);
+    res.json({ token });
+  } catch (err) {
+    console.error('Error generating token:', err);
+    res.status(500).json({ error: 'Token generation failed' });
+  }
 });
 
 // Socket.IO connection handling
@@ -359,6 +387,32 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error('❌ Error handling ice-candidate:', error);
       console.error('❌ Error stack:', error.stack);
+    }
+  });
+
+  // ========== LIVEKIT CALL HANDLERS ===========
+
+  // Caller initiates a LiveKit call to callee
+  socket.on('call-user-livekit', ({ targetCode, callerCode }) => {
+    const targetSocketId = peerCodeMap.get(targetCode);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('user-calling-livekit', { callerCode });
+    }
+  });
+
+  // Callee accepts the LiveKit call
+  socket.on('accept-call-livekit', ({ callerCode, calleeCode }) => {
+    const callerSocketId = peerCodeMap.get(callerCode);
+    if (callerSocketId) {
+      io.to(callerSocketId).emit('call-accepted-livekit', { calleeCode });
+    }
+  });
+
+  // Callee declines the LiveKit call
+  socket.on('decline-call-livekit', ({ callerCode, calleeCode }) => {
+    const callerSocketId = peerCodeMap.get(callerCode);
+    if (callerSocketId) {
+      io.to(callerSocketId).emit('call-declined-livekit', { calleeCode });
     }
   });
 

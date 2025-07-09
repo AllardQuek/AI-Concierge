@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import React, { useState, useEffect, useRef } from 'react';
 import { SocketService } from '../services/socket';
 import { WebRTCService } from '../services/webrtc';
@@ -9,8 +10,15 @@ import MyNumber from './shared/MyNumber.tsx';
 import StatusIndicator from './shared/StatusIndicator.tsx';
 import Instructions from './shared/Instructions.tsx';
 import Footer from './shared/Footer.tsx';
+import { Room, createLocalAudioTrack } from 'livekit-client';
 
 type CallState = 'idle' | 'outgoing' | 'incoming' | 'connected';
+
+// Deterministic room name for 1:1 calls
+function getRoomName(numberA: string, numberB: string): string {
+  const [first, second] = [numberA.trim(), numberB.trim()].sort();
+  return `room-${first}-${second}`;
+}
 
 const LandingPage: React.FC = () => {
   const [friendNumber, setFriendNumber] = useState('');
@@ -47,6 +55,10 @@ const LandingPage: React.FC = () => {
   const [transcripts, setTranscripts] = useState<TranscriptionResult[]>([]);
   const [isTranscriptionLoading, setIsTranscriptionLoading] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string>('');
+
+  const [livekitCallState, setLivekitCallState] = useState<'idle' | 'outgoing' | 'incoming' | 'connected'>('idle');
+  const [livekitCallPartner, setLivekitCallPartner] = useState('');
+  const liveKitRoomRef = useRef<Room | null>(null);
 
   // Handle phone number input with filtering
   const handlePhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -308,6 +320,35 @@ const LandingPage: React.FC = () => {
   useEffect(() => {
     setConnectionStats(connectionStatsRef.current);
   }, [connectionStatsRef.current]);
+
+  // LiveKit call signaling handlers
+  useEffect(() => {
+    if (!socketRef.current) return;
+    // Incoming LiveKit call
+    const onUserCallingLivekit = ({ callerCode }: { callerCode: string }) => {
+      setLivekitCallPartner(callerCode);
+      setLivekitCallState('incoming');
+    };
+    // Call accepted by callee
+    const onCallAcceptedLivekit = ({ calleeCode }: { calleeCode: string }) => {
+      joinLiveKitRoom(calleeCode);
+      setLivekitCallState('connected');
+    };
+    // Call declined by callee
+    const onCallDeclinedLivekit = () => {
+      setLivekitCallState('idle');
+      setLivekitCallPartner('');
+      setError('Call was declined');
+    };
+    (socketRef.current as any).on('user-calling-livekit', onUserCallingLivekit);
+    (socketRef.current as any).on('call-accepted-livekit', onCallAcceptedLivekit);
+    (socketRef.current as any).on('call-declined-livekit', onCallDeclinedLivekit);
+    return () => {
+      (socketRef.current as any)?.off('user-calling-livekit', onUserCallingLivekit);
+      (socketRef.current as any)?.off('call-accepted-livekit', onCallAcceptedLivekit);
+      (socketRef.current as any)?.off('call-declined-livekit', onCallDeclinedLivekit);
+    };
+  }, [socketRef.current]);
 
   const startRingingEffect = () => {
     // Try to vibrate on mobile devices
@@ -644,6 +685,48 @@ const LandingPage: React.FC = () => {
     }
   };
 
+  const handleCallViaLiveKit = async () => {
+    if (!friendNumber.trim()) return;
+    if (callState !== 'idle' || livekitCallState !== 'idle') {
+      setError('Cannot start a new call while another call is in progress.');
+      return;
+    }
+    // Signal B via Socket.IO
+    socketRef.current?.emit('call-user-livekit', {
+      targetCode: friendNumber,
+      callerCode: myNumber,
+    });
+    setLivekitCallPartner(friendNumber);
+    setLivekitCallState('outgoing');
+  };
+
+  const handleAcceptLiveKitCall = async () => {
+    socketRef.current?.emit('accept-call-livekit', { callerCode: livekitCallPartner, calleeCode: myNumber });
+    await joinLiveKitRoom(livekitCallPartner);
+    setLivekitCallState('connected');
+  };
+
+  const handleDeclineLiveKitCall = () => {
+    socketRef.current?.emit('decline-call-livekit', { callerCode: livekitCallPartner, calleeCode: myNumber });
+    setLivekitCallState('idle');
+    setLivekitCallPartner('');
+  };
+
+  const joinLiveKitRoom = async (otherNumber: string) => {
+    const livekitUrl = import.meta.env.VITE_LIVEKIT_URL;
+    const tokenApiUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
+    const roomName = getRoomName(myNumber, otherNumber);
+    const identity = myNumber;
+    const response = await fetch(`${tokenApiUrl}?room=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(identity)}`);
+    const { token } = await response.json();
+    const room = new Room();
+    await room.connect(livekitUrl, token);
+    const audioTrack = await createLocalAudioTrack();
+    await room.localParticipant.publishTrack(audioTrack);
+    liveKitRoomRef.current = room;
+    // Optionally: handle remote tracks, update UI, etc.
+  };
+
   const initiateCall = async (targetNumber: string) => {
     try {
       if (!webrtcRef.current || !socketRef.current) throw new Error('Services not initialized');
@@ -935,13 +1018,14 @@ const LandingPage: React.FC = () => {
             onChange={handlePhoneNumberChange}
             onKeyPress={handlePhoneNumberKeyPress}
             onCall={handleCallFriend}
+            onCallLiveKit={handleCallViaLiveKit}
           />
           <div className="relative my-8">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200"></div>
+              <div className="w-full border-t border-gray-400"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-500">OR</span>
+              <span className="px-4 bg-white text-gray-500"></span>
             </div>
           </div>
           <MyNumber
@@ -968,11 +1052,35 @@ const LandingPage: React.FC = () => {
             onAnswer={handleAnswerCall}
             onDecline={handleDeclineCall}
             onRetry={recoverFromError}
-                                            showTranscription={showTranscription}
+                showTranscription={showTranscription}
                 onToggleTranscription={toggleTranscription}
                 transcripts={transcripts}
                 isTranscriptionLoading={isTranscriptionLoading}
                 transcriptionError={transcriptionError}
+          />
+        )}
+        {livekitCallState !== 'idle' && (
+          <CallInterface
+            callState={livekitCallState as CallInterfaceState}
+            error={error}
+            isMuted={isMuted}
+            callDuration={callDuration}
+            currentCallPartner={livekitCallPartner}
+            isRinging={isRinging}
+            onMute={toggleMute}
+            onEndCall={() => {
+              liveKitRoomRef.current?.disconnect();
+              setLivekitCallState('idle');
+              setLivekitCallPartner('');
+            }}
+            onAnswer={handleAcceptLiveKitCall}
+            onDecline={handleDeclineLiveKitCall}
+            onRetry={recoverFromError}
+            showTranscription={showTranscription}
+            onToggleTranscription={toggleTranscription}
+            transcripts={transcripts}
+            isTranscriptionLoading={isTranscriptionLoading}
+            transcriptionError={transcriptionError}
           />
         )}
         {/* Audio Elements */}
