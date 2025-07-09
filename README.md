@@ -139,7 +139,7 @@ Ready to deploy your Mulisa voice platform? We support both free and paid hostin
 npm run deploy:prep
 ```
 
-**📖 Complete Guide:** [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+**📖 Complete Guide:** [`docs/main/DEPLOYMENT.md`](docs/main/DEPLOYMENT.md)
 
 ### Deployment Options
 - **Free Tier**: Render + Vercel (perfect for POCs)
@@ -155,7 +155,7 @@ npm run deploy:prep
 
 ### Architecture Documentation
 - **[Architecture Overview](docs/architecture-visual.html)** - Interactive visual architecture diagrams
-- **[Port Configuration](docs/port-configuration.md)** - Service ports and networking setup
+- **[Port Configuration](docs/main/port-configuration.md)** - Service ports and networking setup
 - **[Architecture Decision Records (ADRs)](docs/decisions/README.md)** - Documented design decisions and rationale
 
 ### Key Design Decisions
@@ -164,9 +164,9 @@ npm run deploy:prep
 - **[ADR-003: Port Configuration Strategy](docs/decisions/003-port-configuration-strategy.md)** - Service port allocation and conflicts
 
 ### Development Documentation  
-- **[Project Summary](docs/project-summary.md)** - High-level project overview
-- **[Development Status](DEVELOPMENT-STATUS.md)** - Current status and next steps
-- **[Git Workflow](docs/git-workflow.md)** - Development and deployment workflow
+- **[Project Summary](docs/main/project-summary.md)** - High-level project overview
+- **[Development Status](docs/main/development-status.md)** - Current status and next steps
+- **[Git Workflow](docs/main/git-workflow.md)** - Development and deployment workflow
 
 ## 🧩 Project Structure
 
