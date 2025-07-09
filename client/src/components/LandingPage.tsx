@@ -724,7 +724,7 @@ const LandingPage: React.FC = () => {
 
   useEffect(() => {
     if (!socketRef.current) return;
-    const onCallEndedLivekit = ({ fromCode }: { fromCode: string }) => {
+    const onCallEndedLivekit = () => {
       liveKitRoomRef.current?.disconnect();
       setLivekitCallState('idle');
       setLivekitCallPartner('');
@@ -750,7 +750,7 @@ const LandingPage: React.FC = () => {
     liveKitRoomRef.current = room;
     // Handle remote audio tracks
     let remoteAudioEl: HTMLAudioElement | null = null;
-    room.on('trackSubscribed', (track, publication, participant) => {
+    room.on('trackSubscribed', (track) => {
       if (track.kind === 'audio') {
         // Detach previous audio if any
         if (remoteAudioEl) {
