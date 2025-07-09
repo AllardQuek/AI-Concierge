@@ -712,6 +712,30 @@ const LandingPage: React.FC = () => {
     setLivekitCallPartner('');
   };
 
+  const handleEndLiveKitCall = () => {
+    liveKitRoomRef.current?.disconnect();
+    socketRef.current?.emit('end-call-livekit', {
+      targetCode: livekitCallPartner,
+      fromCode: myNumber,
+    });
+    setLivekitCallState('idle');
+    setLivekitCallPartner('');
+  };
+
+  useEffect(() => {
+    if (!socketRef.current) return;
+    const onCallEndedLivekit = ({ fromCode }: { fromCode: string }) => {
+      liveKitRoomRef.current?.disconnect();
+      setLivekitCallState('idle');
+      setLivekitCallPartner('');
+      setError('Call ended by other party');
+    };
+    (socketRef.current as any).on('call-ended-livekit', onCallEndedLivekit);
+    return () => {
+      (socketRef.current as any)?.off('call-ended-livekit', onCallEndedLivekit);
+    };
+  }, [socketRef.current]);
+
   const joinLiveKitRoom = async (otherNumber: string) => {
     const livekitUrl = import.meta.env.VITE_LIVEKIT_URL;
     const tokenApiUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
@@ -724,6 +748,30 @@ const LandingPage: React.FC = () => {
     const audioTrack = await createLocalAudioTrack();
     await room.localParticipant.publishTrack(audioTrack);
     liveKitRoomRef.current = room;
+    // Handle remote audio tracks
+    let remoteAudioEl: HTMLAudioElement | null = null;
+    room.on('trackSubscribed', (track, publication, participant) => {
+      if (track.kind === 'audio') {
+        // Detach previous audio if any
+        if (remoteAudioEl) {
+          try { remoteAudioEl.srcObject = null; } catch {}
+          remoteAudioEl.remove();
+        }
+        const audioElement = track.attach();
+        audioElement.autoplay = true;
+        audioElement.play();
+        remoteAudioEl = audioElement;
+        document.body.appendChild(audioElement); // For quick testing; you can manage this in the UI if desired
+      }
+    });
+    // Clean up remote audio on disconnect
+    room.on('disconnected', () => {
+      if (remoteAudioEl) {
+        try { remoteAudioEl.srcObject = null; } catch {}
+        remoteAudioEl.remove();
+        remoteAudioEl = null;
+      }
+    });
     // Optionally: handle remote tracks, update UI, etc.
   };
 
@@ -1068,11 +1116,7 @@ const LandingPage: React.FC = () => {
             currentCallPartner={livekitCallPartner}
             isRinging={isRinging}
             onMute={toggleMute}
-            onEndCall={() => {
-              liveKitRoomRef.current?.disconnect();
-              setLivekitCallState('idle');
-              setLivekitCallPartner('');
-            }}
+            onEndCall={handleEndLiveKitCall}
             onAnswer={handleAcceptLiveKitCall}
             onDecline={handleDeclineLiveKitCall}
             onRetry={recoverFromError}

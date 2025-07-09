@@ -484,6 +484,14 @@ io.on('connection', (socket) => {
   // Azure transcription events are handled in azure-transcription-service.js
   // The service automatically handles: start-transcription, audio-chunk, stop-transcription
   // start-conversation, end-conversation events
+
+  // LiveKit call end handler
+  socket.on('end-call-livekit', ({ targetCode, fromCode }) => {
+    const targetSocketId = peerCodeMap.get(targetCode);
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('call-ended-livekit', { fromCode });
+    }
+  });
 });
 
 const PORT = process.env.PORT || 3001;
