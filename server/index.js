@@ -502,8 +502,17 @@ io.on('connection', (socket) => {
   socket.on('leave-room', () => {
     const user = users.get(socket.id);
     if (user && user.type === 'peer') {
+      console.log(`🚪 User ${socket.id} manually leaving room, code: "${user.code}"`);
+      
+      // Remove from peer code map if this socket owns the code
+      if (peerCodeMap.get(user.code) === socket.id) {
+        peerCodeMap.delete(user.code);
+        console.log(`🗑️  Removed "${user.code}" from peer code map`);
+      }
+      
       users.delete(socket.id);
       socket.emit('left-room');
+      console.log(`✅ User ${socket.id} successfully left room`);
     }
   });
 

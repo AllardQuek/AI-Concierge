@@ -312,21 +312,47 @@ const LandingPage: React.FC = () => {
   useEffect(() => {
     if (!socketRef.current) return;
 
-    const handleSocketDisconnect = () => {
-      console.log('🔌 Socket disconnected, cleaning up call state');
+    const handleSocketDisconnect = (reason: string) => {
+      console.log('🔌 Socket disconnected, reason:', reason);
+      console.log('🔌 Disconnect timestamp:', new Date().toISOString());
+      console.log('🔌 Current call state:', callState);
+      console.log('🔌 LiveKit call state:', livekitCallState);
+      
       cleanup();
       setCallState('idle');
       setError('Connection lost. Please try again.');
       updateCurrentCallPartner('');
     };
 
-    socketRef.current.on('disconnect', handleSocketDisconnect);
+    const handleSocketConnect = () => {
+      console.log('🔌 Socket reconnected successfully');
+      console.log('🔌 Reconnect timestamp:', new Date().toISOString());
+      setIsConnected(true);
+      setError('');
+    };
 
-    // Clean up listener on unmount
+    const handleSocketReconnectAttempt = (attemptNumber: number) => {
+      console.log('🔌 Socket reconnection attempt:', attemptNumber);
+    };
+
+    const handleSocketReconnectFailed = () => {
+      console.error('🔌 Socket reconnection failed');
+      setError('Unable to reconnect to server');
+    };
+
+    socketRef.current.on('disconnect', handleSocketDisconnect);
+    socketRef.current.on('connect', handleSocketConnect);
+    socketRef.current.on('reconnect_attempt', handleSocketReconnectAttempt);
+    socketRef.current.on('reconnect_failed', handleSocketReconnectFailed);
+
+    // Clean up listeners on unmount
     return () => {
       socketRef.current?.off('disconnect', handleSocketDisconnect);
+      socketRef.current?.off('connect', handleSocketConnect);
+      socketRef.current?.off('reconnect_attempt', handleSocketReconnectAttempt);
+      socketRef.current?.off('reconnect_failed', handleSocketReconnectFailed);
     };
-  }, []);
+  }, [socketRef.current, callState, livekitCallState]);
 
   // Auto-cleanup when call returns to idle after being connected
   useEffect(() => {
@@ -790,12 +816,85 @@ const LandingPage: React.FC = () => {
     const tokenApiUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
     const roomName = getRoomName(myNumber, otherNumber);
     const identity = myNumber;
+    
+    console.log('🎵 LiveKit Room Setup:');
+    console.log(`   Room name: ${roomName}`);
+    console.log(`   Identity: ${identity}`);
+    console.log(`   LiveKit URL: ${livekitUrl}`);
+    
     const response = await fetch(`${tokenApiUrl}?room=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(identity)}`);
     const { token } = await response.json();
+    
+    console.log(`🎟️ Token received: ${token.substring(0, 50)}...`);
+    
     const room = new Room();
+    
+    // Add connection event listeners for debugging
+    room.on('connected', () => {
+      console.log('🟢 LiveKit room connected successfully');
+      console.log(`   Room name: ${room.name}`);
+      console.log(`   Local participant SID: ${room.localParticipant.sid}`);
+    });
+    
+    room.on('disconnected', (reason) => {
+      console.log('🔴 LiveKit room disconnected:', reason);
+    });
+    
+    room.on('reconnecting', () => {
+      console.log('🔄 LiveKit room reconnecting...');
+    });
+    
+    room.on('reconnected', () => {
+      console.log('🟢 LiveKit room reconnected');
+    });
+    
+    console.log('🔌 Connecting to LiveKit room...');
     await room.connect(livekitUrl, token);
-    const audioTrack = await createLocalAudioTrack();
-    await room.localParticipant.publishTrack(audioTrack);
+    
+    console.log('🎤 Creating local audio track...');
+    try {
+      // Request microphone access with specific constraints for better compatibility
+      const audioTrack = await createLocalAudioTrack({
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        sampleRate: 48000,
+        channelCount: 1
+      });
+      
+      console.log('✅ Local audio track created successfully:');
+      console.log(`   Track SID: ${audioTrack.sid}`);
+      console.log(`   Track kind: ${audioTrack.kind}`);
+      console.log(`   Track source: ${audioTrack.source}`);
+      console.log(`   Track is muted: ${audioTrack.isMuted}`);
+      
+      // Check MediaStreamTrack properties
+      const mediaStreamTrack = audioTrack.mediaStreamTrack;
+      if (mediaStreamTrack) {
+        console.log('🎤 MediaStreamTrack properties:');
+        console.log(`   Ready state: ${mediaStreamTrack.readyState}`);
+        console.log(`   Enabled: ${mediaStreamTrack.enabled}`);
+        console.log(`   Muted: ${mediaStreamTrack.muted}`);
+        console.log(`   Label: ${mediaStreamTrack.label}`);
+        console.log(`   Settings:`, mediaStreamTrack.getSettings());
+      }
+      
+      console.log('📤 Publishing local audio track...');
+      const publication = await room.localParticipant.publishTrack(audioTrack);
+      
+      console.log('✅ Local audio track published successfully:');
+      console.log(`   Publication SID: ${publication.trackSid}`);
+      console.log(`   Publication kind: ${publication.kind}`);
+      console.log(`   Publication source: ${publication.source}`);
+      console.log(`   Publication subscribed: ${publication.isSubscribed}`);
+      console.log(`   Publication enabled: ${publication.isEnabled}`);
+      console.log(`   Publication muted: ${publication.isMuted}`);
+      
+    } catch (error) {
+      console.error('❌ Failed to create or publish audio track:', error);
+      throw error;
+    }
+    
     liveKitRoomRef.current = room;
     
     // Initialize participants list with current participants
@@ -818,6 +917,14 @@ const LandingPage: React.FC = () => {
     // Track participant events
     room.on('participantConnected', (participant) => {
       console.log('👋 Participant connected:', participant.identity);
+      console.log(`   Participant SID: ${participant.sid}`);
+      console.log(`   Participant tracks: ${participant.trackPublications.size}`);
+      
+      // Log existing tracks
+      participant.trackPublications.forEach((publication, sid) => {
+        console.log(`   📡 Track publication: ${sid} (${publication.kind})`);
+      });
+      
       updateParticipantsList();
     });
     
@@ -826,91 +933,152 @@ const LandingPage: React.FC = () => {
       updateParticipantsList();
     });
     
+    // Add track publication events for debugging
+    room.on('trackPublished', (publication, participant) => {
+      console.log('📡 Track published:');
+      console.log(`   From: ${participant.identity}`);
+      console.log(`   Track SID: ${publication.trackSid}`);
+      console.log(`   Kind: ${publication.kind}`);
+      console.log(`   Source: ${publication.source}`);
+    });
+    
+    room.on('trackUnpublished', (publication, participant) => {
+      console.log('📡 Track unpublished:');
+      console.log(`   From: ${participant.identity}`);
+      console.log(`   Track SID: ${publication.trackSid}`);
+    });
+    
     // Initial participants update
     updateParticipantsList();
     
-    // Handle remote audio tracks
-    let remoteAudioEl: HTMLAudioElement | null = null;
-    room.on('trackSubscribed', (track) => {
-      console.log('🎵 Track subscribed:', track.kind, 'from source:', track.source);
+    // Check for existing remote tracks when we join
+    console.log('🔍 Checking for existing remote participants and tracks...');
+    room.remoteParticipants.forEach((participant) => {
+      console.log(`👤 Existing participant: ${participant.identity}`);
+      console.log(`   Track publications: ${participant.trackPublications.size}`);
+      
+      participant.trackPublications.forEach((publication) => {
+        console.log(`   📡 Existing track: ${publication.trackSid} (${publication.kind}, subscribed: ${publication.isSubscribed})`);
+        
+        // If track is already subscribed, manually trigger the subscription handler
+        if (publication.isSubscribed && publication.track) {
+          console.log('🔄 Manually handling existing subscribed track');
+          // Trigger track subscription manually
+          room.emit('trackSubscribed', publication.track, publication, participant);
+        }
+      });
+    });
+    
+    // Handle remote audio tracks - using Map to handle multiple participants
+    const remoteAudioElements = new Map<string, HTMLAudioElement>();
+    
+    room.on('trackSubscribed', (track, publication, participant) => {
+      console.log('🎵 Track subscribed:');
+      console.log(`   From: ${participant.identity}`);
+      console.log(`   Track kind: ${track.kind}`);
+      console.log(`   Track source: ${track.source}`);
+      console.log(`   Track SID: ${track.sid}`);
+      console.log(`   Publication SID: ${publication.trackSid}`);
       
       if (track.kind === 'audio') {
         console.log('🎤 Audio track received, setting up playback...');
         
-        // Detach previous audio if any
-        if (remoteAudioEl) {
+        // Clean up any existing audio element for this participant
+        const existingAudio = remoteAudioElements.get(participant.identity);
+        if (existingAudio) {
           try { 
-            console.log('🔄 Detaching previous audio element');
-            remoteAudioEl.srcObject = null; 
-            remoteAudioEl.remove(); 
+            console.log('🔄 Detaching previous audio element for:', participant.identity);
+            track.detach(existingAudio);
+            existingAudio.remove(); 
+            remoteAudioElements.delete(participant.identity);
           } catch (err) {
             console.warn('⚠️ Error detaching previous audio:', err);
           }
         }
         
         try {
-          const audioElement = track.attach();
-          console.log('🔗 Audio element attached:', audioElement);
+          const audioElement = track.attach() as HTMLAudioElement;
+          console.log('🔗 Audio element attached for:', participant.identity);
           
           // Configure audio element for optimal playback
           audioElement.autoplay = true;
           audioElement.volume = 1.0;
           audioElement.muted = false;
+          audioElement.setAttribute('playsinline', 'true'); // Important for mobile
+          audioElement.style.display = 'none'; // Hide the audio element
+          
+          // Store the audio element
+          remoteAudioElements.set(participant.identity, audioElement);
+          
+          // Add to DOM first, then set up event listeners
+          document.body.appendChild(audioElement);
+          console.log('✅ Remote audio element added to DOM for:', participant.identity);
+
+          // Try to play the audio element and catch autoplay errors
+          audioElement.play().then(() => {
+            console.log('▶️ Audio playback started successfully for', participant.identity);
+          }).catch((err) => {
+            console.warn('⚠️ Audio playback was blocked by browser autoplay policy for', participant.identity, err);
+            // Optionally, show a UI prompt to the user here
+          });
+          
+          // Test audio levels after a short delay
+          setTimeout(() => {
+            console.log('🔊 Audio element test for', participant.identity, ':', {
+              volume: audioElement.volume,
+              muted: audioElement.muted,
+              paused: audioElement.paused,
+              currentTime: audioElement.currentTime,
+              duration: audioElement.duration,
+              readyState: audioElement.readyState
+            });
+            
+            // Ensure volume is at maximum
+            audioElement.volume = 1.0;
+            console.log('🔊 Set volume to maximum for:', participant.identity);
+          }, 1000);
           
           // Add event listeners for debugging
           audioElement.onloadedmetadata = () => {
-            console.log('✅ Audio metadata loaded, duration:', audioElement.duration);
+            console.log('✅ Audio metadata loaded for', participant.identity, ', duration:', audioElement.duration);
           };
           
           audioElement.oncanplay = () => {
-            console.log('✅ Audio can play, attempting playback...');
+            console.log('✅ Audio can play for', participant.identity);
           };
           
           audioElement.onplay = () => {
-            console.log('🎵 Audio playback started successfully');
+            console.log('🎵 Audio playback started for', participant.identity);
           };
           
-          audioElement.onerror = (e) => {
-            console.error('❌ Audio playback error:', e);
+          audioElement.onerror = (error) => {
+            console.error('❌ Audio playback error for', participant.identity, ':', error);
           };
-          
-          // Attempt to play the audio
-          const playPromise = audioElement.play();
-          if (playPromise !== undefined) {
-            playPromise
-              .then(() => {
-                console.log('🎵 Audio playback started successfully');
-              })
-              .catch((error) => {
-                console.error('❌ Failed to play audio:', error);
-                // Try again after user interaction
-                document.addEventListener('click', () => {
-                  audioElement.play().catch(err => console.error('❌ Still failed to play:', err));
-                }, { once: true });
-              });
-          }
-          
-          remoteAudioEl = audioElement;
-          document.body.appendChild(audioElement);
-          console.log('✅ Remote audio element added to DOM');
           
         } catch (error) {
-          console.error('❌ Error setting up audio playback:', error);
+          console.error('❌ Error setting up audio playback for', participant.identity, ':', error);
         }
       }
     });
     
     // Handle track unsubscription
-    room.on('trackUnsubscribed', (track) => {
-      console.log('🔇 Track unsubscribed:', track.kind, 'from source:', track.source);
-      if (track.kind === 'audio' && remoteAudioEl) {
-        try {
-          remoteAudioEl.srcObject = null;
-          remoteAudioEl.remove();
-          remoteAudioEl = null;
-          console.log('✅ Remote audio element cleaned up');
-        } catch (err) {
-          console.warn('⚠️ Error cleaning up audio element:', err);
+    room.on('trackUnsubscribed', (track, _publication, participant) => {
+      console.log('🔇 Track unsubscribed:');
+      console.log(`   From: ${participant.identity}`);
+      console.log(`   Track kind: ${track.kind}`);
+      console.log(`   Track source: ${track.source}`);
+      
+      if (track.kind === 'audio') {
+        const audioElement = remoteAudioElements.get(participant.identity);
+        if (audioElement) {
+          try {
+            track.detach(audioElement);
+            audioElement.remove();
+            remoteAudioElements.delete(participant.identity);
+            console.log('✅ Remote audio element cleaned up for:', participant.identity);
+          } catch (err) {
+            console.warn('⚠️ Error cleaning up audio element for', participant.identity, ':', err);
+          }
         }
       }
     });
@@ -919,11 +1087,17 @@ const LandingPage: React.FC = () => {
       console.log('🔌 Room disconnected, clearing participants');
       setParticipants([]);
       setIsInvitingBot(false);
-      if (remoteAudioEl) {
-        try { remoteAudioEl.srcObject = null; } catch {}
-        remoteAudioEl.remove();
-        remoteAudioEl = null;
+      
+      // Clean up all remote audio elements
+      for (const [participantId, audioElement] of remoteAudioElements.entries()) {
+        try {
+          audioElement.remove();
+          console.log('🧹 Cleaned up audio element for:', participantId);
+        } catch (err) {
+          console.warn('⚠️ Error cleaning up audio element for', participantId, ':', err);
+        }
       }
+      remoteAudioElements.clear();
     });
     // Optionally: handle remote tracks, update UI, etc.
   };
@@ -1058,7 +1232,31 @@ const LandingPage: React.FC = () => {
   };
 
   const toggleMute = () => {
-    if (webrtcRef.current) {
+    if (livekitCallState === 'connected' && liveKitRoomRef.current) {
+      // Handle LiveKit muting
+      const audioPublication = liveKitRoomRef.current.localParticipant.audioTrackPublications.values().next().value;
+      if (audioPublication && audioPublication.track) {
+        const newMutedState = !isMuted;
+        if (newMutedState) {
+          audioPublication.track.mute();
+        } else {
+          audioPublication.track.unmute();
+        }
+        setIsMuted(newMutedState);
+        console.log(`🔇 LiveKit audio ${newMutedState ? 'muted' : 'unmuted'}`);
+        
+        // Debug the track state
+        console.log('🎤 Local audio track state:', {
+          isMuted: audioPublication.track.isMuted,
+          trackSid: audioPublication.trackSid,
+          kind: audioPublication.track.kind,
+          source: audioPublication.track.source
+        });
+      } else {
+        console.warn('⚠️ No audio track found for LiveKit muting');
+      }
+    } else if (webrtcRef.current) {
+      // Handle WebRTC muting
       webrtcRef.current.toggleMute();
       setIsMuted(!isMuted);
     }
