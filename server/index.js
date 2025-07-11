@@ -416,9 +416,19 @@ io.on('connection', (socket) => {
 
   // Callee accepts the LiveKit call
   socket.on('accept-call-livekit', ({ callerCode, calleeCode }) => {
+    console.log(`📞 LiveKit call accepted: calleeCode="${calleeCode}", callerCode="${callerCode}"`);
+    console.log(`📱 Callee socket: ${socket.id}`);
+    
     const callerSocketId = peerCodeMap.get(callerCode);
+    console.log(`🔍 Caller socket lookup result: ${callerSocketId ? `FOUND (${callerSocketId})` : 'NOT FOUND'}`);
+    
     if (callerSocketId) {
+      console.log(`📡 Sending call-accepted-livekit to caller socket ${callerSocketId}`);
       io.to(callerSocketId).emit('call-accepted-livekit', { calleeCode });
+      console.log(`✅ Call acceptance notification sent to ${callerCode}`);
+    } else {
+      console.log(`❌ Caller ${callerCode} not found when accepting call`);
+      console.log(`📊 Available users: [${Array.from(peerCodeMap.keys()).join(', ')}]`);
     }
   });
 
