@@ -802,12 +802,19 @@ const LandingPage: React.FC = () => {
       setError('Cannot start a new call while another call is in progress.');
       return;
     }
+    
+    // Normalize the phone number before calling (same as regular calls)
+    const normalizedNumber = normalizePhoneNumber(friendNumber.trim());
+    console.log(`📞 LiveKit Phone Number Normalization:`);
+    console.log(`   Original input: "${friendNumber.trim()}"`);
+    console.log(`   Normalized to: "${normalizedNumber}"`);
+    
     // Signal B via Socket.IO
     socketRef.current?.emit('call-user-livekit', {
-      targetCode: friendNumber,
+      targetCode: normalizedNumber,
       callerCode: myNumber,
     });
-    setLivekitCallPartner(friendNumber);
+    setLivekitCallPartner(normalizedNumber);
     setLivekitCallState('outgoing');
     // Do NOT join the room here! Wait for call-accepted-livekit event
   };
