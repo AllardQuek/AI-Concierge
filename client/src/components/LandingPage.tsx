@@ -903,11 +903,35 @@ const LandingPage: React.FC = () => {
     console.log(`   Generated room name: ${roomName}`);
     console.log(`   Identity: ${identity}`);
     console.log(`   LiveKit URL: ${livekitUrl}`);
+        console.log(`   Token API URL: ${tokenApiUrl}`);
     
-    const response = await fetch(`${tokenApiUrl}?room=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(identity)}`);
-    const { token } = await response.json();
-    
-    console.log(`🎟️ Token received: ${token.substring(0, 50)}...`);
+    let token;
+    try {
+      console.log(`🔗 Requesting token from: ${tokenApiUrl}?room=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(identity)}`);
+      const response = await fetch(`${tokenApiUrl}?room=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(identity)}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`❌ Token request failed: ${response.status} ${response.statusText}`);
+        console.error(`❌ Error response: ${errorText}`);
+        throw new Error(`Token request failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const tokenData = await response.json();
+      token = tokenData.token;
+      
+      if (!token) {
+        console.error('❌ No token received from server');
+        throw new Error('No token received from server');
+      }
+      
+      console.log(`🎟️ Token received: ${token.substring(0, 50)}...`);
+      console.log(`🎟️ Token length: ${token.length} characters`);
+    } catch (error) {
+      console.error('❌ Failed to get LiveKit token:', error);
+      setError(`Failed to get LiveKit token: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return;
+    }
     
     const room = new Room();
     
@@ -931,7 +955,18 @@ const LandingPage: React.FC = () => {
     });
     
     console.log('🔌 Connecting to LiveKit room...');
-    await room.connect(livekitUrl, token);
+    console.log(`   Room name: ${roomName}`);
+    console.log(`   Identity: ${identity}`);
+    console.log(`   LiveKit URL: ${livekitUrl}`);
+    
+    try {
+      await room.connect(livekitUrl, token);
+      console.log('✅ LiveKit room connection initiated successfully');
+    } catch (error) {
+      console.error('❌ Failed to connect to LiveKit room:', error);
+      setError(`Failed to connect to LiveKit room: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return;
+    }
     
     console.log('🎤 Creating local audio track...');
     try {
