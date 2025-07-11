@@ -81,6 +81,19 @@ const LandingPage: React.FC = () => {
   const [participants, setParticipants] = useState<Array<{ identity: string; isBot: boolean }>>([]);
   const [isInvitingBot, setIsInvitingBot] = useState(false);
   const liveKitRoomRef = useRef<Room | null>(null);
+  
+  // Refs to track current values for event handlers
+  const livekitCallPartnerRef = useRef<string>('');
+  const myNumberRef = useRef<string>('');
+  
+  // Update refs when state changes
+  useEffect(() => {
+    livekitCallPartnerRef.current = livekitCallPartner;
+  }, [livekitCallPartner]);
+  
+  useEffect(() => {
+    myNumberRef.current = myNumber;
+  }, [myNumber]);
 
   // Handle phone number input with filtering
   const handlePhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -399,6 +412,9 @@ const LandingPage: React.FC = () => {
   // LiveKit call signaling handlers
   useEffect(() => {
     if (!socketRef.current) return;
+    
+    console.log('🔧 Setting up LiveKit event handlers...');
+    
     // Incoming LiveKit call
     const onUserCallingLivekit = ({ callerCode }: { callerCode: string }) => {
       console.log(`📞 Received LiveKit call from: "${callerCode}"`);
@@ -416,16 +432,18 @@ const LandingPage: React.FC = () => {
     };
     // Call accepted by callee
     const onCallAcceptedLivekit = () => {
-      console.log(`🎵 LiveKit call accepted by callee!`);
-      console.log(`   Current livekitCallPartner: "${livekitCallPartner}"`);
-      console.log(`   Current myNumber: "${myNumber}"`);
+      console.log(`🎵 call-accepted-livekit event received!`);
+      console.log(`   Event timestamp: ${new Date().toISOString()}`);
       
-      // Both caller and callee join the room now
-      // Use the consistent partner number (livekitCallPartner) for room naming
-      console.log(`🎵 LiveKit call accepted, joining room with partner: "${livekitCallPartner}"`);
+      // Get current values from refs (more reliable than closures)
+      const currentPartner = livekitCallPartnerRef.current;
+      const currentMyNumber = myNumberRef.current;
+      
+      console.log(`   Current livekitCallPartner: "${currentPartner}"`);
+      console.log(`   Current myNumber: "${currentMyNumber}"`);
       
       // Validate livekitCallPartner before joining room
-      if (!livekitCallPartner || livekitCallPartner.trim() === '') {
+      if (!currentPartner || currentPartner.trim() === '') {
         console.error('❌ Cannot join LiveKit room: livekitCallPartner is empty');
         setError('Invalid call partner information');
         setLivekitCallState('idle');
@@ -433,18 +451,17 @@ const LandingPage: React.FC = () => {
       }
       
       // Validate myNumber is available
-      if (!myNumber || myNumber.trim() === '') {
+      if (!currentMyNumber || currentMyNumber.trim() === '') {
         console.error('❌ Cannot join LiveKit room: myNumber is empty');
         setError('Invalid user number information');
         setLivekitCallState('idle');
         return;
       }
       
-      console.log(`✅ Validated numbers - My: "${myNumber}", Partner: "${livekitCallPartner}"`);
+      console.log(`✅ Validated numbers - My: "${currentMyNumber}", Partner: "${currentPartner}"`);
       console.log(`🚀 Starting room join process...`);
-      joinLiveKitRoom(livekitCallPartner);
+      joinLiveKitRoom(currentPartner);
       setLivekitCallState('connected');
-      // Use LiveKit-specific timer, not WebRTC timer
       startCallDurationTimer();
     };
     // Call declined by callee
@@ -468,14 +485,18 @@ const LandingPage: React.FC = () => {
     (socketRef.current as any).on('call-declined-livekit', onCallDeclinedLivekit);
     (socketRef.current as any).on('bot-invitation-started', onBotInvitationStarted);
     (socketRef.current as any).on('bot-invitation-completed', onBotInvitationCompleted);
+    
+    console.log('✅ LiveKit event handlers registered successfully');
+    
     return () => {
+      console.log('🧹 Cleaning up LiveKit event handlers...');
       (socketRef.current as any)?.off('user-calling-livekit', onUserCallingLivekit);
       (socketRef.current as any)?.off('call-accepted-livekit', onCallAcceptedLivekit);
       (socketRef.current as any)?.off('call-declined-livekit', onCallDeclinedLivekit);
       (socketRef.current as any)?.off('bot-invitation-started', onBotInvitationStarted);
       (socketRef.current as any)?.off('bot-invitation-completed', onBotInvitationCompleted);
     };
-  }, [socketRef.current, livekitCallPartner, myNumber]);
+  }, [socketRef.current]); // Removed livekitCallPartner and myNumber dependencies
 
   const startRingingEffect = () => {
     // Try to vibrate on mobile devices
@@ -853,7 +874,8 @@ const LandingPage: React.FC = () => {
     });
     setLivekitCallPartner(normalizedNumber);
     setLivekitCallState('outgoing');
-    // Do NOT join the room here! Wait for call-accepted-livekit event
+    console.log('📞 LiveKit call initiated, waiting for callee to accept...');
+    // Wait for call-accepted-livekit event before joining room
   };
 
   const handleAcceptLiveKitCall = async () => {
@@ -867,10 +889,29 @@ const LandingPage: React.FC = () => {
       return;
     }
     
+    // Validate numbers before proceeding
+    if (!livekitCallPartner || livekitCallPartner.trim() === '') {
+      console.error('❌ Cannot accept call: livekitCallPartner is empty');
+      setError('Invalid call partner information');
+      return;
+    }
+    
+    if (!myNumber || myNumber.trim() === '') {
+      console.error('❌ Cannot accept call: myNumber is empty');
+      setError('Invalid user number information');
+      return;
+    }
+    
+    console.log('📡 Sending accept call signal to server...');
     socketRef.current.emit('accept-call-livekit', { callerCode: livekitCallPartner, calleeCode: myNumber });
-    console.log('✅ Accept call signal sent to server');
-    // Don't join room here - wait for call-accepted-livekit event
-    // The room join will happen in onCallAcceptedLivekit handler
+    
+    console.log('🚀 Callee joining LiveKit room immediately...');
+    // Join room immediately when accepting - no need to wait for server confirmation
+    await joinLiveKitRoom(livekitCallPartner);
+    setLivekitCallState('connected');
+    startCallDurationTimer();
+    
+    console.log('✅ Callee successfully joined LiveKit room');
   };
 
   const handleDeclineLiveKitCall = () => {

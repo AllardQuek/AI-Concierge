@@ -437,6 +437,9 @@ io.on('connection', (socket) => {
     } else {
       console.log(`❌ Caller ${callerCode} not found when accepting call`);
       console.log(`📊 Available users: [${Array.from(peerCodeMap.keys()).join(', ')}]`);
+      
+      // Send error to callee since caller is not available
+      socket.emit('error', { message: `Caller ${callerCode} is no longer available` });
     }
   });
 
