@@ -406,8 +406,28 @@ const LandingPage: React.FC = () => {
     const onCallAcceptedLivekit = () => {
       // Both caller and callee join the room now
       // Use the consistent partner number (livekitCallPartner) for room naming
+      console.log(`🎵 LiveKit call accepted, joining room with partner: "${livekitCallPartner}"`);
+      
+      // Validate livekitCallPartner before joining room
+      if (!livekitCallPartner || livekitCallPartner.trim() === '') {
+        console.error('❌ Cannot join LiveKit room: livekitCallPartner is empty');
+        setError('Invalid call partner information');
+        setLivekitCallState('idle');
+        return;
+      }
+      
+      // Validate myNumber is available
+      if (!myNumber || myNumber.trim() === '') {
+        console.error('❌ Cannot join LiveKit room: myNumber is empty');
+        setError('Invalid user number information');
+        setLivekitCallState('idle');
+        return;
+      }
+      
+      console.log(`✅ Validated numbers - My: "${myNumber}", Partner: "${livekitCallPartner}"`);
       joinLiveKitRoom(livekitCallPartner);
       setLivekitCallState('connected');
+      // Use LiveKit-specific timer, not WebRTC timer
       startCallDurationTimer();
     };
     // Call declined by callee
@@ -438,7 +458,7 @@ const LandingPage: React.FC = () => {
       (socketRef.current as any)?.off('bot-invitation-started', onBotInvitationStarted);
       (socketRef.current as any)?.off('bot-invitation-completed', onBotInvitationCompleted);
     };
-  }, [socketRef.current]);
+  }, [socketRef.current, livekitCallPartner, myNumber]);
 
   const startRingingEffect = () => {
     // Try to vibrate on mobile devices
@@ -865,11 +885,22 @@ const LandingPage: React.FC = () => {
   const joinLiveKitRoom = async (otherNumber: string) => {
     const livekitUrl = import.meta.env.VITE_LIVEKIT_URL;
     const tokenApiUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
+    
+    // Validate phone numbers before generating room name
+    if (!myNumber || !otherNumber) {
+      console.error('❌ Invalid phone numbers for LiveKit room:', { myNumber, otherNumber });
+      setError('Invalid phone numbers for LiveKit call');
+      return;
+    }
+    
+    console.log('🎵 LiveKit Room Setup:');
+    console.log(`   My number: "${myNumber}"`);
+    console.log(`   Other number: "${otherNumber}"`);
+    
     const roomName = getRoomName(myNumber, otherNumber);
     const identity = myNumber;
     
-    console.log('🎵 LiveKit Room Setup:');
-    console.log(`   Room name: ${roomName}`);
+    console.log(`   Generated room name: ${roomName}`);
     console.log(`   Identity: ${identity}`);
     console.log(`   LiveKit URL: ${livekitUrl}`);
     
