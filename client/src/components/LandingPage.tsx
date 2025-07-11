@@ -378,8 +378,10 @@ const LandingPage: React.FC = () => {
       setLivekitCallState('incoming');
     };
     // Call accepted by callee
-    const onCallAcceptedLivekit = ({ calleeCode }: { calleeCode: string }) => {
-      joinLiveKitRoom(calleeCode);
+    const onCallAcceptedLivekit = () => {
+      // Both caller and callee join the room now
+      // Use the consistent partner number (livekitCallPartner) for room naming
+      joinLiveKitRoom(livekitCallPartner);
       setLivekitCallState('connected');
       startCallDurationTimer();
     };
@@ -390,24 +392,20 @@ const LandingPage: React.FC = () => {
       setError('Call was declined');
       stopCallDurationTimer();
     };
-    
     // Bot invitation state handlers
     const onBotInvitationStarted = () => {
       console.log('🤖 Bot invitation started by other participant');
       setIsInvitingBot(true);
     };
-    
     const onBotInvitationCompleted = () => {
       console.log('🤖 Bot invitation completed');
       setIsInvitingBot(false);
     };
-    
     (socketRef.current as any).on('user-calling-livekit', onUserCallingLivekit);
     (socketRef.current as any).on('call-accepted-livekit', onCallAcceptedLivekit);
     (socketRef.current as any).on('call-declined-livekit', onCallDeclinedLivekit);
     (socketRef.current as any).on('bot-invitation-started', onBotInvitationStarted);
     (socketRef.current as any).on('bot-invitation-completed', onBotInvitationCompleted);
-    
     return () => {
       (socketRef.current as any)?.off('user-calling-livekit', onUserCallingLivekit);
       (socketRef.current as any)?.off('call-accepted-livekit', onCallAcceptedLivekit);
@@ -765,13 +763,13 @@ const LandingPage: React.FC = () => {
     });
     setLivekitCallPartner(friendNumber);
     setLivekitCallState('outgoing');
+    // Do NOT join the room here! Wait for call-accepted-livekit event
   };
 
   const handleAcceptLiveKitCall = async () => {
     socketRef.current?.emit('accept-call-livekit', { callerCode: livekitCallPartner, calleeCode: myNumber });
-    await joinLiveKitRoom(livekitCallPartner);
-    setLivekitCallState('connected');
-    startCallDurationTimer();
+    // Don't join room here - wait for call-accepted-livekit event
+    // The room join will happen in onCallAcceptedLivekit handler
   };
 
   const handleDeclineLiveKitCall = () => {
