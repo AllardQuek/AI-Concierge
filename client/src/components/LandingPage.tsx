@@ -101,6 +101,7 @@ const LandingPage: React.FC = () => {
       }
     }
     
+    console.log(`📝 Phone number input changed: "${friendNumber}" -> "${value}"`);
     setFriendNumber(value);
   };
 
@@ -329,6 +330,12 @@ const LandingPage: React.FC = () => {
       console.log('🔌 Reconnect timestamp:', new Date().toISOString());
       setIsConnected(true);
       setError('');
+      
+      // Re-register the user number when reconnecting
+      if (myNumber && socketRef.current) {
+        console.log(`📝 Re-registering user number after reconnect: ${myNumber}`);
+        socketRef.current.joinRoom(myNumber);
+      }
     };
 
     const handleSocketReconnectAttempt = (attemptNumber: number) => {
@@ -383,6 +390,11 @@ const LandingPage: React.FC = () => {
   useEffect(() => {
     setConnectionStats(connectionStatsRef.current);
   }, [connectionStatsRef.current]);
+
+  // Debug friendNumber state changes
+  useEffect(() => {
+    console.log(`📱 friendNumber state changed to: "${friendNumber}"`);
+  }, [friendNumber]);
 
   // LiveKit call signaling handlers
   useEffect(() => {

@@ -199,11 +199,19 @@ io.on('connection', (socket) => {
       // Check if this code is already registered
       const existingSocketId = peerCodeMap.get(userCode);
       if (existingSocketId && existingSocketId !== socket.id) {
-        console.log(`⚠️  Code "${userCode}" was previously registered to socket ${existingSocketId}, overriding with ${socket.id}`);
+        console.log(`🔄 Code "${userCode}" was previously registered to socket ${existingSocketId}, updating to ${socket.id} (reconnection)`);
+        
+        // Clean up the old socket if it still exists in users map
+        const oldUser = users.get(existingSocketId);
+        if (oldUser) {
+          console.log(`🧹 Cleaning up old socket ${existingSocketId} for user "${userCode}"`);
+          users.delete(existingSocketId);
+        }
       }
       
-      // Map the user code to socket ID
+      // Map the user code to socket ID (updates existing or creates new)
       peerCodeMap.set(userCode, socket.id);
+      console.log(`📱 Updated peer code map: "${userCode}" -> socket ${socket.id}`);
       
       // Store user info
       users.set(socket.id, {
@@ -480,11 +488,12 @@ io.on('connection', (socket) => {
       
       // Handle peer-to-peer disconnection cleanup
       if (user.type === 'peer' && user.code) {
-        console.log(`🧹 Cleaning up peer "${user.code}" (socket: ${socket.id})`);
+        console.log(`🧹 Handling disconnect for peer "${user.code}" (socket: ${socket.id})`);
         
-        // Remove from peer code map
-        peerCodeMap.delete(user.code);
-        console.log(`🗑️  Removed "${user.code}" from peer code map`);
+        // DON'T remove from peer code map on disconnect - keep users registered
+        // This allows them to remain available for calls even after temporary disconnections
+        // The peerCodeMap will be updated when they reconnect with their new socket ID
+        console.log(`📱 Keeping "${user.code}" registered in peer code map for reconnection`);
         
         // Clean up any active P2P calls involving this user
         let cleanedCalls = 0;
@@ -521,7 +530,7 @@ io.on('connection', (socket) => {
     console.log(`🔌 === END USER DISCONNECT DEBUG ===\n`);
   });
 
-  // Handle manual leave room (legacy - can be removed if not needed)
+  // Handle manual leave room (explicit user action to unregister)
   socket.on('leave-room', () => {
     const user = users.get(socket.id);
     if (user && user.type === 'peer') {
@@ -530,7 +539,7 @@ io.on('connection', (socket) => {
       // Remove from peer code map if this socket owns the code
       if (peerCodeMap.get(user.code) === socket.id) {
         peerCodeMap.delete(user.code);
-        console.log(`🗑️  Removed "${user.code}" from peer code map`);
+        console.log(`🗑️  Removed "${user.code}" from peer code map (explicit leave)`);
       }
       
       users.delete(socket.id);
