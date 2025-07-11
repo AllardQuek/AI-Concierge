@@ -914,10 +914,30 @@ const LandingPage: React.FC = () => {
     console.log(`   Other number: "${otherNumber}"`);
     
     const roomName = getRoomName(myNumber, otherNumber);
-    const identity = myNumber;
+    
+    // Normalize identity to match room name format (digits only)
+    const normalizeForIdentity = (phoneNumber: string): string => {
+      const digitsOnly = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
+      
+      // Handle 8-digit Singapore mobile numbers (without country code)
+      if (digitsOnly.length === 8 && (digitsOnly.startsWith('8') || digitsOnly.startsWith('9'))) {
+        return `65${digitsOnly}`; // Add 65 prefix for consistency
+      }
+      
+      // Handle numbers that already have 65 prefix
+      if (digitsOnly.startsWith('65') && digitsOnly.length === 10) {
+        return digitsOnly;
+      }
+      
+      // Return as-is if we can't normalize
+      return digitsOnly;
+    };
+    
+    const identity = normalizeForIdentity(myNumber);
     
     console.log(`   Generated room name: ${roomName}`);
-    console.log(`   Identity: ${identity}`);
+    console.log(`   Original myNumber: "${myNumber}"`);
+    console.log(`   Normalized identity: "${identity}"`);
     console.log(`   LiveKit URL: ${livekitUrl}`);
         console.log(`   Token API URL: ${tokenApiUrl}`);
     
