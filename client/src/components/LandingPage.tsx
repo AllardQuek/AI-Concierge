@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { SocketService } from '../services/socket';
 import { WebRTCService } from '../services/webrtc';
 import CallInterface, { CallState as CallInterfaceState } from './CallInterface';
@@ -38,6 +38,99 @@ function getRoomName(numberA: string, numberB: string): string {
   const cleanB = normalizeForRoom(numberB);
   const [first, second] = [cleanA, cleanB].sort();
   return `room-${first}-${second}`;
+}
+
+// Test audio levels to ensure microphone is working before joining LiveKit
+async function testAudioLevelsBeforeJoining(stream: MediaStream): Promise<void> {
+  return new Promise((resolve) => {
+    console.log('🔊 Testing audio levels from microphone...');
+    
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      source.connect(analyser);
+      
+      analyser.fftSize = 256;
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      
+      let testCount = 0;
+      let audioDetected = false;
+      const maxTests = 20; // Test for 2 seconds (20 * 100ms)
+      
+      const testInterval = setInterval(() => {
+        analyser.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+        
+        console.log(`🎤 Audio level test ${testCount + 1}: ${average.toFixed(2)}`);
+        
+        if (average > 2) { // Very low threshold to detect any audio
+          audioDetected = true;
+          console.log('✅ Audio detected from microphone!');
+          clearInterval(testInterval);
+          audioContext.close();
+          resolve();
+          return;
+        }
+        
+        testCount++;
+        if (testCount >= maxTests) {
+          clearInterval(testInterval);
+          audioContext.close();
+          if (!audioDetected) {
+            console.warn('⚠️ No audio detected from microphone - please check microphone settings');
+          }
+          resolve();
+        }
+      }, 100);
+      
+    } catch (error) {
+      console.warn('⚠️ Could not test audio levels:', error);
+      resolve();
+    }
+  });
+}
+
+// Toast context and provider
+const ToastContext = createContext<(msg: string) => void>(() => {});
+
+const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [toast, setToast] = useState<string | null>(null);
+  const [visible, setVisible] = useState(false);
+  const timeoutRef = useRef<number | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setVisible(true);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = window.setTimeout(() => {
+      setVisible(false);
+    }, 4000);
+  };
+
+  const handleClose = () => {
+    setVisible(false);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+  };
+
+  return (
+    <ToastContext.Provider value={showToast}>
+      {children}
+      {toast && visible && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="bg-gray-900 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-fade-in">
+            <span>{toast}</span>
+            <button onClick={handleClose} className="ml-4 text-white hover:text-gray-300 focus:outline-none">✖️</button>
+          </div>
+        </div>
+      )}
+    </ToastContext.Provider>
+  );
+};
+
+function useToast() {
+  return useContext(ToastContext);
 }
 
 const LandingPage: React.FC = () => {
@@ -721,7 +814,8 @@ const LandingPage: React.FC = () => {
       }
       
       setCallState('idle');
-      setError('Call ended by other party');
+      // Instead of setError('Call ended by other party'), show toast
+      showToast('Call ended by other party');
       clearTimeout(callTimeoutRef.current!); // Clear connection timeout
     });
 
@@ -835,7 +929,7 @@ const LandingPage: React.FC = () => {
       
       updateCurrentCallPartner(normalizedNumber);
       setCallState('outgoing');
-      setError('');
+      setError(''); // Clear error before starting call
       
       if (!webrtcRef.current) {
         await initializeCallServices();
@@ -861,21 +955,33 @@ const LandingPage: React.FC = () => {
       return;
     }
     
-    // Normalize the phone number before calling (same as regular calls)
-    const normalizedNumber = normalizePhoneNumber(friendNumber.trim());
-    console.log(`📞 LiveKit Phone Number Normalization:`);
-    console.log(`   Original input: "${friendNumber.trim()}"`);
-    console.log(`   Normalized to: "${normalizedNumber}"`);
-    
-    // Signal B via Socket.IO
-    socketRef.current?.emit('call-user-livekit', {
-      targetCode: normalizedNumber,
-      callerCode: myNumber,
-    });
-    setLivekitCallPartner(normalizedNumber);
-    setLivekitCallState('outgoing');
-    console.log('📞 LiveKit call initiated, waiting for callee to accept...');
-    // Wait for call-accepted-livekit event before joining room
+    try {
+      // Normalize the phone number before calling (same as regular calls)
+      const normalizedNumber = normalizePhoneNumber(friendNumber.trim());
+      console.log(`📞 LiveKit Phone Number Normalization:`);
+      console.log(`   Original input: "${friendNumber.trim()}"`);
+      console.log(`   Normalized to: "${normalizedNumber}"`);
+      
+      // Pre-request microphone permissions to ensure user gesture requirement
+      console.log('🎤 Pre-requesting microphone permissions for caller...');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop()); // Stop test stream
+      console.log('✅ Microphone permissions granted for caller');
+      
+      // Signal B via Socket.IO
+      socketRef.current?.emit('call-user-livekit', {
+        targetCode: normalizedNumber,
+        callerCode: myNumber,
+      });
+      setLivekitCallPartner(normalizedNumber);
+      setLivekitCallState('outgoing');
+      console.log('📞 LiveKit call initiated, waiting for callee to accept...');
+      // Wait for call-accepted-livekit event before joining room
+      setError(''); // Clear error before starting call
+    } catch (error) {
+      console.error('❌ Failed to initiate LiveKit call:', error);
+      setError(`Failed to initiate call: ${error instanceof Error ? error.message : 'Microphone permission required'}`);
+    }
   };
 
   const handleAcceptLiveKitCall = async () => {
@@ -902,16 +1008,29 @@ const LandingPage: React.FC = () => {
       return;
     }
     
-    console.log('📡 Sending accept call signal to server...');
-    socketRef.current.emit('accept-call-livekit', { callerCode: livekitCallPartner, calleeCode: myNumber });
-    
-    console.log('🚀 Callee joining LiveKit room immediately...');
-    // Join room immediately when accepting - no need to wait for server confirmation
-    await joinLiveKitRoom(livekitCallPartner);
-    setLivekitCallState('connected');
-    startCallDurationTimer();
-    
-    console.log('✅ Callee successfully joined LiveKit room');
+    try {
+      console.log('📡 Sending accept call signal to server...');
+      socketRef.current.emit('accept-call-livekit', { callerCode: livekitCallPartner, calleeCode: myNumber });
+      
+      console.log('🚀 Callee joining LiveKit room immediately...');
+      
+      // Ensure we have user gesture for audio by requesting permissions first
+      console.log('🎤 Requesting microphone permissions for callee...');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop()); // Stop test stream
+      console.log('✅ Microphone permissions granted for callee');
+      
+      // Join room immediately when accepting - no need to wait for server confirmation
+      await joinLiveKitRoom(livekitCallPartner);
+      setLivekitCallState('connected');
+      startCallDurationTimer();
+      
+      console.log('✅ Callee successfully joined LiveKit room');
+    } catch (error) {
+      console.error('❌ Failed to accept LiveKit call:', error);
+      setError(`Failed to accept call: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setLivekitCallState('idle');
+    }
   };
 
   const handleDeclineLiveKitCall = () => {
@@ -1029,6 +1148,7 @@ const LandingPage: React.FC = () => {
       console.log('🟢 LiveKit room connected successfully');
       console.log(`   Room name: ${room.name}`);
       console.log(`   Local participant SID: ${room.localParticipant.sid}`);
+      console.log(`   Local participant identity: ${room.localParticipant.identity}`);
     });
     
     room.on('disconnected', (reason) => {
@@ -1041,6 +1161,70 @@ const LandingPage: React.FC = () => {
     
     room.on('reconnected', () => {
       console.log('🟢 LiveKit room reconnected');
+    });
+    
+    // Add audio level monitoring
+    room.on('localTrackPublished', (publication) => {
+      console.log('📡 Local track published:', publication.trackSid, publication.kind);
+      
+      if (publication.kind === 'audio' && publication.track) {
+        console.log('🎤 Setting up audio level monitoring for local track');
+        
+        // Monitor audio levels to detect if microphone is working
+        const audioTrack = publication.track as any;
+        if (audioTrack.mediaStreamTrack) {
+          // Create audio context to monitor levels (if available)
+          try {
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const source = audioContext.createMediaStreamSource(new MediaStream([audioTrack.mediaStreamTrack]));
+            const analyser = audioContext.createAnalyser();
+            source.connect(analyser);
+            
+            analyser.fftSize = 32;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            let silenceCount = 0;
+            const checkAudioLevel = () => {
+              analyser.getByteFrequencyData(dataArray);
+              const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+              
+              if (average < 5) {
+                silenceCount++;
+                if (silenceCount % 10 === 0) { // Log every 10 silence checks
+                  console.log(`🔇 Audio level check: ${average.toFixed(2)} (silence count: ${silenceCount})`);
+                }
+              } else {
+                if (silenceCount > 0) {
+                  console.log(`🎤 Audio detected! Level: ${average.toFixed(2)} (ending silence streak of ${silenceCount})`);
+                  silenceCount = 0;
+                }
+              }
+            };
+            
+            const audioLevelInterval = setInterval(checkAudioLevel, 1000);
+            
+            // Clean up when room disconnects
+            room.once('disconnected', () => {
+              clearInterval(audioLevelInterval);
+              audioContext.close();
+            });
+            
+          } catch (error) {
+            console.warn('⚠️ Could not set up audio level monitoring:', error);
+          }
+        }
+      }
+    });
+    
+    // Monitor for silence detection events from LiveKit
+    room.on('localTrackUnpublished', (publication) => {
+      console.log('📡 Local track unpublished:', publication.trackSid, publication.kind);
+    });
+    
+    // Add error handling for connection issues
+    room.on('disconnected', (reason) => {
+      console.log('🔴 LiveKit connection error or disconnect:', reason);
     });
     
     console.log('🔌 Connecting to LiveKit room...');
@@ -1059,7 +1243,44 @@ const LandingPage: React.FC = () => {
     
     console.log('🎤 Creating local audio track...');
     try {
-      // Request microphone access with specific constraints for better compatibility
+      // First, test microphone access with getUserMedia to ensure permissions
+      console.log('🎤 Testing microphone access...');
+      const testStream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 48000,
+          channelCount: 1
+        } 
+      });
+      
+      // Verify the stream has audio tracks
+      const audioTracks = testStream.getAudioTracks();
+      console.log(`🎤 Audio tracks available: ${audioTracks.length}`);
+      
+      if (audioTracks.length === 0) {
+        throw new Error('No audio tracks available from microphone');
+      }
+      
+      // Test the audio track with a more comprehensive check
+      const testTrack = audioTracks[0];
+      console.log('🎤 Test track properties:', {
+        enabled: testTrack.enabled,
+        muted: testTrack.muted,
+        readyState: testTrack.readyState,
+        label: testTrack.label,
+        settings: testTrack.getSettings()
+      });
+      
+      // Test audio levels on the test stream before stopping it
+      await testAudioLevelsBeforeJoining(testStream);
+      
+      // Stop the test stream before creating LiveKit track
+      testStream.getTracks().forEach(track => track.stop());
+      console.log('✅ Microphone test completed successfully');
+      
+      // Now create the LiveKit audio track with the same constraints
       const audioTrack = await createLocalAudioTrack({
         echoCancellation: true,
         noiseSuppression: true,
@@ -1083,10 +1304,54 @@ const LandingPage: React.FC = () => {
         console.log(`   Muted: ${mediaStreamTrack.muted}`);
         console.log(`   Label: ${mediaStreamTrack.label}`);
         console.log(`   Settings:`, mediaStreamTrack.getSettings());
+        
+        // Force enable the track if it's disabled
+        if (!mediaStreamTrack.enabled) {
+          console.log('⚠️ Audio track is disabled, enabling...');
+          mediaStreamTrack.enabled = true;
+        }
+        
+        // Test if the track is producing audio data
+        console.log('🔊 Testing audio data production...');
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(new MediaStream([mediaStreamTrack]));
+        const analyser = audioContext.createAnalyser();
+        source.connect(analyser);
+        
+        analyser.fftSize = 32;
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        // Quick audio level test
+        let hasAudio = false;
+        for (let i = 0; i < 10; i++) {
+          analyser.getByteFrequencyData(dataArray);
+          const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+          if (average > 0) {
+            hasAudio = true;
+            console.log(`🎤 Audio data detected: level ${average.toFixed(2)}`);
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        if (!hasAudio) {
+          console.warn('⚠️ No audio data detected - microphone may be muted or disconnected');
+        }
+        
+        audioContext.close();
+      }
+      
+      // Ensure the track is not muted before publishing
+      if (audioTrack.isMuted) {
+        console.log('🔊 Audio track is muted, unmuting...');
+        await audioTrack.unmute();
       }
       
       console.log('📤 Publishing local audio track...');
-      const publication = await room.localParticipant.publishTrack(audioTrack);
+      const publication = await room.localParticipant.publishTrack(audioTrack, {
+        name: 'microphone'
+      });
       
       console.log('✅ Local audio track published successfully:');
       console.log(`   Publication SID: ${publication.trackSid}`);
@@ -1095,6 +1360,27 @@ const LandingPage: React.FC = () => {
       console.log(`   Publication subscribed: ${publication.isSubscribed}`);
       console.log(`   Publication enabled: ${publication.isEnabled}`);
       console.log(`   Publication muted: ${publication.isMuted}`);
+      
+      // Wait a moment and check if the publication is working
+      setTimeout(() => {
+        console.log('🔊 Post-publish track status check:');
+        console.log(`   Track is muted: ${audioTrack.isMuted}`);
+        console.log(`   Publication is muted: ${publication.isMuted}`);
+        console.log(`   Publication is enabled: ${publication.isEnabled}`);
+        console.log(`   MediaStreamTrack enabled: ${mediaStreamTrack?.enabled}`);
+        console.log(`   MediaStreamTrack muted: ${mediaStreamTrack?.muted}`);
+        console.log(`   MediaStreamTrack readyState: ${mediaStreamTrack?.readyState}`);
+        
+        // Force unmute if still muted
+        if (audioTrack.isMuted || publication.isMuted) {
+          console.log('⚠️ Track still muted, forcing unmute...');
+          audioTrack.unmute().then(() => {
+            console.log('✅ Track unmuted successfully');
+          }).catch((error) => {
+            console.error('❌ Failed to unmute track:', error);
+          });
+        }
+      }, 1000);
       
     } catch (error) {
       console.error('❌ Failed to create or publish audio track:', error);
@@ -1220,13 +1506,37 @@ const LandingPage: React.FC = () => {
           document.body.appendChild(audioElement);
           console.log('✅ Remote audio element added to DOM for:', participant.identity);
 
-          // Try to play the audio element and catch autoplay errors
-          audioElement.play().then(() => {
-            console.log('▶️ Audio playback started successfully for', participant.identity);
-          }).catch((err) => {
-            console.warn('⚠️ Audio playback was blocked by browser autoplay policy for', participant.identity, err);
-            // Optionally, show a UI prompt to the user here
-          });
+          // Handle autoplay policy with user-friendly error handling
+          const playAudio = async () => {
+            try {
+              await audioElement.play();
+              console.log('▶️ Audio playback started successfully for', participant.identity);
+            } catch (err: any) {
+              console.warn('⚠️ Audio playback was blocked by browser autoplay policy for', participant.identity, err);
+              
+              // Show user-friendly message for autoplay issues
+              if (err.name === 'NotAllowedError') {
+                console.log('🔊 Requesting user interaction to enable audio playback...');
+                setError('Click anywhere to enable audio playback');
+                
+                // Add a one-time click handler to enable audio
+                const enableAudio = () => {
+                  audioElement.play().then(() => {
+                    console.log('▶️ Audio enabled after user interaction for', participant.identity);
+                    setError(''); // Clear the error message
+                  }).catch((retryErr) => {
+                    console.error('❌ Still failed to play audio after user interaction:', retryErr);
+                  });
+                  document.removeEventListener('click', enableAudio);
+                };
+                
+                document.addEventListener('click', enableAudio, { once: true });
+              }
+            }
+          };
+          
+          // Try to play immediately, but handle autoplay gracefully
+          playAudio();
           
           // Test audio levels after a short delay
           setTimeout(() => {
@@ -1236,12 +1546,22 @@ const LandingPage: React.FC = () => {
               paused: audioElement.paused,
               currentTime: audioElement.currentTime,
               duration: audioElement.duration,
-              readyState: audioElement.readyState
+              readyState: audioElement.readyState,
+              networkState: audioElement.networkState
             });
             
-            // Ensure volume is at maximum
+            // Ensure volume is at maximum and not muted
             audioElement.volume = 1.0;
-            console.log('🔊 Set volume to maximum for:', participant.identity);
+            audioElement.muted = false;
+            console.log('🔊 Audio settings optimized for:', participant.identity);
+            
+            // If audio is still paused, try to resume it
+            if (audioElement.paused) {
+              console.log('⚠️ Audio is paused, attempting to resume...');
+              audioElement.play().catch((err) => {
+                console.warn('Could not resume paused audio:', err);
+              });
+            }
           }, 1000);
           
           // Add event listeners for debugging
@@ -1371,6 +1691,110 @@ const LandingPage: React.FC = () => {
       setIsInvitingBot(false);
     }
   };
+
+  // Comprehensive audio diagnostic function (available for debugging: call runAudioDiagnostics() in console)
+  const runAudioDiagnostics = async () => {
+    console.log('🔍 Running comprehensive audio diagnostics...');
+    
+    try {
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error('❌ getUserMedia not supported in this browser');
+        return { success: false, error: 'getUserMedia not supported' };
+      }
+      
+      // Test microphone permissions
+      console.log('🎤 Testing microphone permissions...');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      const audioTracks = stream.getAudioTracks();
+      console.log(`🎤 Available audio tracks: ${audioTracks.length}`);
+      
+      if (audioTracks.length === 0) {
+        stream.getTracks().forEach(track => track.stop());
+        return { success: false, error: 'No audio tracks available' };
+      }
+      
+      const track = audioTracks[0];
+      console.log('🎤 Primary audio track:', {
+        label: track.label,
+        enabled: track.enabled,
+        muted: track.muted,
+        readyState: track.readyState,
+        settings: track.getSettings(),
+        capabilities: track.getCapabilities()
+      });
+      
+      // Test audio context and analysis
+      console.log('🔊 Testing audio analysis...');
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      source.connect(analyser);
+      
+      analyser.fftSize = 256;
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      
+      // Test for 3 seconds
+      let maxLevel = 0;
+      let audioDetected = false;
+      
+      for (let i = 0; i < 30; i++) {
+        analyser.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+        const max = Math.max(...dataArray);
+        
+        if (average > maxLevel) maxLevel = average;
+        if (average > 1) audioDetected = true;
+        
+        if (i % 10 === 0) {
+          console.log(`🔊 Audio test ${i/10 + 1}/3: avg=${average.toFixed(2)}, max=${max}`);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      // Clean up
+      audioContext.close();
+      stream.getTracks().forEach(track => track.stop());
+      
+      console.log(`🔊 Audio diagnostic results:`);
+      console.log(`   Audio detected: ${audioDetected}`);
+      console.log(`   Max level: ${maxLevel.toFixed(2)}`);
+      console.log(`   Track enabled: ${track.enabled}`);
+      console.log(`   Track muted: ${track.muted}`);
+      
+      if (!audioDetected) {
+        console.warn('⚠️ No audio input detected - microphone may be muted or disconnected');
+        return { 
+          success: false, 
+          error: 'No audio input detected',
+          details: {
+            trackEnabled: track.enabled,
+            trackMuted: track.muted,
+            maxLevel: maxLevel,
+            label: track.label
+          }
+        };
+      }
+      
+      console.log('✅ Audio diagnostics passed');
+      return { success: true, maxLevel: maxLevel };
+      
+    } catch (error) {
+      console.error('❌ Audio diagnostics failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  };
+
+  // Make diagnostics available globally for debugging
+  React.useEffect(() => {
+    (window as any).runAudioDiagnostics = runAudioDiagnostics;
+    return () => {
+      delete (window as any).runAudioDiagnostics;
+    };
+  }, []);
 
   const initiateCall = async (targetNumber: string) => {
     try {
@@ -1677,85 +2101,89 @@ const LandingPage: React.FC = () => {
     console.log('📱 Updated current call partner to:', partner || '(empty)');
   };
 
+  const showToast = useToast();
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-md mx-auto">
-        <Header />
-        <div className="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
-          <CallInput
-            friendNumber={friendNumber}
-            onChange={handlePhoneNumberChange}
-            onKeyPress={handlePhoneNumberKeyPress}
-            onCall={handleCallFriend}
-            onCallLiveKit={handleCallViaLiveKit}
-          />
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-400"></div>
+    <ToastProvider>
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="max-w-md mx-auto">
+          <Header />
+          <div className="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
+            <CallInput
+              friendNumber={friendNumber}
+              onChange={handlePhoneNumberChange}
+              onKeyPress={handlePhoneNumberKeyPress}
+              onCall={handleCallFriend}
+              onCallLiveKit={handleCallViaLiveKit}
+            />
+            <div className="relative my-8">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-400"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-white text-gray-500"></span>
+              </div>
             </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-500"></span>
+            <MyNumber
+              myNumber={myNumber}
+              onCopy={copyMyNumber}
+            />
+            <StatusIndicator isConnected={isConnected} />
+            <div className="mt-6">
+              <Instructions />
             </div>
           </div>
-          <MyNumber
-            myNumber={myNumber}
-            onCopy={copyMyNumber}
-          />
-          <StatusIndicator isConnected={isConnected} />
-          <div className="mt-6">
-            <Instructions />
-          </div>
+          <Footer />
+          {/* Call Interface Overlay - shows different content based on call state */}
+          {callState !== 'idle' && (
+            <CallInterface
+              callState={callState as CallInterfaceState}
+              error={error}
+              isMuted={isMuted}
+              callDuration={callDuration}
+              currentCallPartner={currentCallPartner}
+              isRinging={isRinging}
+              onMute={toggleMute}
+              onEndCall={endCall}
+              onAnswer={handleAnswerCall}
+              onDecline={handleDeclineCall}
+              onRetry={recoverFromError}
+                  showTranscription={showTranscription}
+                  onToggleTranscription={toggleTranscription}
+                  transcripts={transcripts}
+                  isTranscriptionLoading={isTranscriptionLoading}
+                  transcriptionError={transcriptionError}
+            />
+          )}
+          {livekitCallState !== 'idle' && (
+            <CallInterface
+              callState={livekitCallState as CallInterfaceState}
+              error={error}
+              isMuted={isMuted}
+              callDuration={callDuration}
+              currentCallPartner={livekitCallPartner}
+              isRinging={isRinging}
+              participants={participants}
+              onMute={toggleMute}
+              onEndCall={handleEndLiveKitCall}
+              onAnswer={handleAcceptLiveKitCall}
+              onDecline={handleDeclineLiveKitCall}
+              onRetry={recoverFromError}
+              onInviteBot={inviteBotToCall}
+              isInvitingBot={isInvitingBot}
+              showTranscription={showTranscription}
+              onToggleTranscription={toggleTranscription}
+              transcripts={transcripts}
+              isTranscriptionLoading={isTranscriptionLoading}
+              transcriptionError={transcriptionError}
+            />
+          )}
+          {/* Audio Elements */}
+          <audio ref={localAudioRef} muted />
+          <audio ref={remoteAudioRef} autoPlay />
         </div>
-        <Footer />
-        {/* Call Interface Overlay - shows different content based on call state */}
-        {callState !== 'idle' && (
-          <CallInterface
-            callState={callState as CallInterfaceState}
-            error={error}
-            isMuted={isMuted}
-            callDuration={callDuration}
-            currentCallPartner={currentCallPartner}
-            isRinging={isRinging}
-            onMute={toggleMute}
-            onEndCall={endCall}
-            onAnswer={handleAnswerCall}
-            onDecline={handleDeclineCall}
-            onRetry={recoverFromError}
-                showTranscription={showTranscription}
-                onToggleTranscription={toggleTranscription}
-                transcripts={transcripts}
-                isTranscriptionLoading={isTranscriptionLoading}
-                transcriptionError={transcriptionError}
-          />
-        )}
-        {livekitCallState !== 'idle' && (
-          <CallInterface
-            callState={livekitCallState as CallInterfaceState}
-            error={error}
-            isMuted={isMuted}
-            callDuration={callDuration}
-            currentCallPartner={livekitCallPartner}
-            isRinging={isRinging}
-            participants={participants}
-            onMute={toggleMute}
-            onEndCall={handleEndLiveKitCall}
-            onAnswer={handleAcceptLiveKitCall}
-            onDecline={handleDeclineLiveKitCall}
-            onRetry={recoverFromError}
-            onInviteBot={inviteBotToCall}
-            isInvitingBot={isInvitingBot}
-            showTranscription={showTranscription}
-            onToggleTranscription={toggleTranscription}
-            transcripts={transcripts}
-            isTranscriptionLoading={isTranscriptionLoading}
-            transcriptionError={transcriptionError}
-          />
-        )}
-        {/* Audio Elements */}
-        <audio ref={localAudioRef} muted />
-        <audio ref={remoteAudioRef} autoPlay />
       </div>
-    </div>
+    </ToastProvider>
   );
 };
 
