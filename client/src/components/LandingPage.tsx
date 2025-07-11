@@ -1143,6 +1143,133 @@ const LandingPage: React.FC = () => {
     
     const room = new Room();
     
+    // Handle remote audio tracks - using Map to handle multiple participants
+    const remoteAudioElements = new Map<string, HTMLAudioElement>();
+    
+    // Define track subscription handler as a separate function for reuse
+    const handleTrackSubscription = (track: any, publication: any, participant: any) => {
+      console.log('🎵 Handling track subscription:');
+      console.log(`   From: ${participant.identity}`);
+      console.log(`   Track kind: ${track.kind}`);
+      console.log(`   Track source: ${track.source}`);
+      console.log(`   Track SID: ${track.sid}`);
+      console.log(`   Publication SID: ${publication.trackSid}`);
+      
+      if (track.kind === 'audio') {
+        console.log('🎤 Audio track received, setting up playback...');
+        
+        // Clean up any existing audio element for this participant
+        const existingAudio = remoteAudioElements.get(participant.identity);
+        if (existingAudio) {
+          try { 
+            console.log('🔄 Detaching previous audio element for:', participant.identity);
+            track.detach(existingAudio);
+            existingAudio.remove(); 
+            remoteAudioElements.delete(participant.identity);
+          } catch (err) {
+            console.warn('⚠️ Error detaching previous audio:', err);
+          }
+        }
+        
+        try {
+          const audioElement = track.attach() as HTMLAudioElement;
+          console.log('🔗 Audio element attached for:', participant.identity);
+          
+          // Configure audio element for optimal playback
+          audioElement.autoplay = true;
+          audioElement.volume = 1.0;
+          audioElement.muted = false;
+          audioElement.setAttribute('playsinline', 'true'); // Important for mobile
+          audioElement.style.display = 'none'; // Hide the audio element
+          
+          // Store the audio element
+          remoteAudioElements.set(participant.identity, audioElement);
+          
+          // Add to DOM first, then set up event listeners
+          document.body.appendChild(audioElement);
+          console.log('✅ Remote audio element added to DOM for:', participant.identity);
+
+          // Handle autoplay policy with user-friendly error handling
+          const playAudio = async () => {
+            try {
+              await audioElement.play();
+              console.log('▶️ Audio playback started successfully for', participant.identity);
+            } catch (err: any) {
+              console.warn('⚠️ Audio playback was blocked by browser autoplay policy for', participant.identity, err);
+              
+              // Show user-friendly message for autoplay issues
+              if (err.name === 'NotAllowedError') {
+                console.log('🔊 Requesting user interaction to enable audio playback...');
+                setError('Click anywhere to enable audio playback');
+                
+                // Add a one-time click handler to enable audio
+                const enableAudio = () => {
+                  audioElement.play().then(() => {
+                    console.log('▶️ Audio enabled after user interaction for', participant.identity);
+                    setError(''); // Clear the error message
+                  }).catch((retryErr) => {
+                    console.error('❌ Still failed to play audio after user interaction:', retryErr);
+                  });
+                  document.removeEventListener('click', enableAudio);
+                };
+                
+                document.addEventListener('click', enableAudio, { once: true });
+              }
+            }
+          };
+          
+          // Try to play immediately, but handle autoplay gracefully
+          playAudio();
+          
+          // Test audio levels after a short delay
+          setTimeout(() => {
+            console.log('🔊 Audio element test for', participant.identity, ':', {
+              volume: audioElement.volume,
+              muted: audioElement.muted,
+              paused: audioElement.paused,
+              currentTime: audioElement.currentTime,
+              duration: audioElement.duration,
+              readyState: audioElement.readyState,
+              networkState: audioElement.networkState
+            });
+            
+            // Ensure volume is at maximum and not muted
+            audioElement.volume = 1.0;
+            audioElement.muted = false;
+            console.log('🔊 Audio settings optimized for:', participant.identity);
+            
+            // If audio is still paused, try to resume it
+            if (audioElement.paused) {
+              console.log('⚠️ Audio is paused, attempting to resume...');
+              audioElement.play().catch((err) => {
+                console.warn('Could not resume paused audio:', err);
+              });
+            }
+          }, 1000);
+          
+          // Add event listeners for debugging
+          audioElement.onloadedmetadata = () => {
+            console.log('✅ Audio metadata loaded for', participant.identity, ', duration:', audioElement.duration);
+          };
+          
+          audioElement.oncanplay = () => {
+            console.log('✅ Audio can play for', participant.identity);
+          };
+          
+          audioElement.onplay = () => {
+            console.log('🎵 Audio playback started for', participant.identity);
+          };
+          
+          audioElement.onerror = (error) => {
+            console.error('❌ Audio playback error for', participant.identity, ':', error);
+          };
+          
+        } catch (error) {
+          console.error('❌ Error setting up audio playback for', participant.identity, ':', error);
+        }
+      }
+    };
+    
     // Add connection event listeners for debugging
     room.on('connected', () => {
       console.log('🟢 LiveKit room connected successfully');
@@ -1466,133 +1593,6 @@ const LandingPage: React.FC = () => {
         }
       });
     });
-    
-    // Define track subscription handler as a separate function for reuse
-    const handleTrackSubscription = (track: any, publication: any, participant: any) => {
-      console.log('🎵 Handling track subscription:');
-      console.log(`   From: ${participant.identity}`);
-      console.log(`   Track kind: ${track.kind}`);
-      console.log(`   Track source: ${track.source}`);
-      console.log(`   Track SID: ${track.sid}`);
-      console.log(`   Publication SID: ${publication.trackSid}`);
-      
-      if (track.kind === 'audio') {
-        console.log('🎤 Audio track received, setting up playback...');
-        
-        // Clean up any existing audio element for this participant
-        const existingAudio = remoteAudioElements.get(participant.identity);
-        if (existingAudio) {
-          try { 
-            console.log('🔄 Detaching previous audio element for:', participant.identity);
-            track.detach(existingAudio);
-            existingAudio.remove(); 
-            remoteAudioElements.delete(participant.identity);
-          } catch (err) {
-            console.warn('⚠️ Error detaching previous audio:', err);
-          }
-        }
-        
-        try {
-          const audioElement = track.attach() as HTMLAudioElement;
-          console.log('🔗 Audio element attached for:', participant.identity);
-          
-          // Configure audio element for optimal playback
-          audioElement.autoplay = true;
-          audioElement.volume = 1.0;
-          audioElement.muted = false;
-          audioElement.setAttribute('playsinline', 'true'); // Important for mobile
-          audioElement.style.display = 'none'; // Hide the audio element
-          
-          // Store the audio element
-          remoteAudioElements.set(participant.identity, audioElement);
-          
-          // Add to DOM first, then set up event listeners
-          document.body.appendChild(audioElement);
-          console.log('✅ Remote audio element added to DOM for:', participant.identity);
-
-          // Handle autoplay policy with user-friendly error handling
-          const playAudio = async () => {
-            try {
-              await audioElement.play();
-              console.log('▶️ Audio playback started successfully for', participant.identity);
-            } catch (err: any) {
-              console.warn('⚠️ Audio playback was blocked by browser autoplay policy for', participant.identity, err);
-              
-              // Show user-friendly message for autoplay issues
-              if (err.name === 'NotAllowedError') {
-                console.log('🔊 Requesting user interaction to enable audio playback...');
-                setError('Click anywhere to enable audio playback');
-                
-                // Add a one-time click handler to enable audio
-                const enableAudio = () => {
-                  audioElement.play().then(() => {
-                    console.log('▶️ Audio enabled after user interaction for', participant.identity);
-                    setError(''); // Clear the error message
-                  }).catch((retryErr) => {
-                    console.error('❌ Still failed to play audio after user interaction:', retryErr);
-                  });
-                  document.removeEventListener('click', enableAudio);
-                };
-                
-                document.addEventListener('click', enableAudio, { once: true });
-              }
-            }
-          };
-          
-          // Try to play immediately, but handle autoplay gracefully
-          playAudio();
-          
-          // Test audio levels after a short delay
-          setTimeout(() => {
-            console.log('🔊 Audio element test for', participant.identity, ':', {
-              volume: audioElement.volume,
-              muted: audioElement.muted,
-              paused: audioElement.paused,
-              currentTime: audioElement.currentTime,
-              duration: audioElement.duration,
-              readyState: audioElement.readyState,
-              networkState: audioElement.networkState
-            });
-            
-            // Ensure volume is at maximum and not muted
-            audioElement.volume = 1.0;
-            audioElement.muted = false;
-            console.log('🔊 Audio settings optimized for:', participant.identity);
-            
-            // If audio is still paused, try to resume it
-            if (audioElement.paused) {
-              console.log('⚠️ Audio is paused, attempting to resume...');
-              audioElement.play().catch((err) => {
-                console.warn('Could not resume paused audio:', err);
-              });
-            }
-          }, 1000);
-          
-          // Add event listeners for debugging
-          audioElement.onloadedmetadata = () => {
-            console.log('✅ Audio metadata loaded for', participant.identity, ', duration:', audioElement.duration);
-          };
-          
-          audioElement.oncanplay = () => {
-            console.log('✅ Audio can play for', participant.identity);
-          };
-          
-          audioElement.onplay = () => {
-            console.log('🎵 Audio playback started for', participant.identity);
-          };
-          
-          audioElement.onerror = (error) => {
-            console.error('❌ Audio playback error for', participant.identity, ':', error);
-          };
-          
-        } catch (error) {
-          console.error('❌ Error setting up audio playback for', participant.identity, ':', error);
-        }
-      }
-    };
-    
-    // Handle remote audio tracks - using Map to handle multiple participants
-    const remoteAudioElements = new Map<string, HTMLAudioElement>();
     
     room.on('trackSubscribed', (track, publication, participant) => {
       console.log('🎵 Track subscribed event fired:');
