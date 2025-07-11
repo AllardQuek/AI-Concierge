@@ -395,9 +395,22 @@ io.on('connection', (socket) => {
 
   // Caller initiates a LiveKit call to callee
   socket.on('call-user-livekit', ({ targetCode, callerCode }) => {
+    console.log(`📞 LiveKit call initiated: callerCode="${callerCode}", targetCode="${targetCode}"`);
+    
+    // Validate callerCode before forwarding
+    if (!callerCode || callerCode.trim() === '') {
+      console.error(`❌ Invalid callerCode for LiveKit call: "${callerCode}"`);
+      socket.emit('error', { message: 'Invalid caller code for LiveKit call' });
+      return;
+    }
+    
     const targetSocketId = peerCodeMap.get(targetCode);
     if (targetSocketId) {
+      console.log(`📡 Forwarding LiveKit call to ${targetCode} (socket: ${targetSocketId})`);
       io.to(targetSocketId).emit('user-calling-livekit', { callerCode });
+    } else {
+      console.log(`❌ Target user ${targetCode} not found for LiveKit call`);
+      socket.emit('error', { message: `User ${targetCode} is not available` });
     }
   });
 

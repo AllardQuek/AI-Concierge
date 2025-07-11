@@ -364,6 +364,21 @@ const LandingPage: React.FC = () => {
     }
   }, [callState, currentCallPartner]);
 
+  // Recovery mechanism for stuck states
+  useEffect(() => {
+    // If we're stuck in incoming state for too long, auto-cleanup
+    if (callState === 'incoming') {
+      const stuckTimeout = setTimeout(() => {
+        console.log('⚠️ Call stuck in incoming state for 60 seconds, auto-cleaning up');
+        cleanup();
+        setCallState('idle');
+        setError('Call timed out - please try again');
+      }, 60000); // 60 seconds
+
+      return () => clearTimeout(stuckTimeout);
+    }
+  }, [callState]);
+
   // Update connection stats state when ref changes
   useEffect(() => {
     setConnectionStats(connectionStatsRef.current);
@@ -374,8 +389,18 @@ const LandingPage: React.FC = () => {
     if (!socketRef.current) return;
     // Incoming LiveKit call
     const onUserCallingLivekit = ({ callerCode }: { callerCode: string }) => {
+      console.log(`📞 Received LiveKit call from: "${callerCode}"`);
+      
+      // Validate callerCode before setting it
+      if (!callerCode || callerCode.trim() === '') {
+        console.error(`❌ Invalid callerCode received: "${callerCode}"`);
+        setError('Received invalid caller information');
+        return;
+      }
+      
       setLivekitCallPartner(callerCode);
       setLivekitCallState('incoming');
+      console.log(`✅ LiveKit call partner set to: "${callerCode}"`);
     };
     // Call accepted by callee
     const onCallAcceptedLivekit = () => {
@@ -485,12 +510,14 @@ const LandingPage: React.FC = () => {
 
     webrtcRef.current.onConnectionStateChange((state: string) => {
       console.log('🔗 WebRTC connection state:', state);
+      console.log('📱 Current call state before WebRTC state change:', callState);
       
       if (state === 'connected') {
         // Track connection start time for stability monitoring
         connectionStartTimeRef.current = Date.now();
         connectionStatsRef.current.connectionsSucceeded++;
         
+        console.log('✅ Transitioning call state from', callState, 'to connected');
         setCallState('connected');
         setError(''); // Clear any previous errors
         startCallDurationTimer(); // Start timing the call
@@ -596,12 +623,19 @@ const LandingPage: React.FC = () => {
     if (!socketRef.current) return;
 
     socketRef.current.on('call-answered', async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
-      console.log('📞 Call was answered');
+      console.log('📞 Call was answered by remote peer');
       if (webrtcRef.current) {
-        await webrtcRef.current.setRemoteAnswer(answer);
-        setCallState('connected');
-        startCallDurationTimer(); // Start the timer when call is answered
-        clearTimeout(callTimeoutRef.current!); // Clear connection timeout
+        try {
+          await webrtcRef.current.setRemoteAnswer(answer);
+          console.log('✅ Remote answer set successfully');
+          // The WebRTC connection state change handler will set call state to 'connected'
+          clearTimeout(callTimeoutRef.current!); // Clear connection timeout
+        } catch (error) {
+          console.error('❌ Failed to set remote answer:', error);
+          cleanup();
+          setError('Failed to establish connection - please try again');
+          setCallState('idle');
+        }
       }
     });
 
@@ -646,6 +680,12 @@ const LandingPage: React.FC = () => {
     try {
       stopRingingEffect();
       
+      // Validate current state
+      if (callState !== 'incoming') {
+        console.warn('⚠️ Attempted to answer call in wrong state:', callState);
+        return;
+      }
+      
       if (!webrtcRef.current) {
         await initializeCallServices();
       }
@@ -680,16 +720,22 @@ const LandingPage: React.FC = () => {
         answer
       });
       
-      console.log('✅ Call answered successfully');
-      setCallState('connected');
+      console.log('✅ Call answer sent successfully');
+      // DON'T set call state to 'connected' here - wait for WebRTC connection
+      // The WebRTC connection state change handler will set it to 'connected'
+      
+      // Set a timeout for the recipient as well
+      callTimeoutRef.current = window.setTimeout(() => {
+        console.log('⏰ Recipient connection timeout after 30 seconds');
+        cleanup();
+        setError('Connection timeout - please try again');
+        setCallState('idle');
+      }, 30000); // 30 second timeout
       
       // Clean up the stored offer
       if ((window as any).incomingOffer) {
         delete (window as any).incomingOffer;
       }
-      
-      // Start the call duration timer
-      startCallDurationTimer();
       
     } catch (err) {
       console.error('❌ Failed to answer call:', err);
@@ -1112,6 +1158,25 @@ const LandingPage: React.FC = () => {
       return;
     }
 
+    // Validate phone numbers before inviting bot
+    if (!myNumber || !livekitCallPartner) {
+      console.error('❌ Invalid phone numbers for bot invitation:', { myNumber, livekitCallPartner });
+      setError('Cannot invite AI Oracle: Invalid phone numbers detected');
+      return;
+    }
+
+    // Clean and validate phone numbers
+    const cleanMyNumber = myNumber.replace(/\D/g, '');
+    const cleanPartnerNumber = livekitCallPartner.replace(/\D/g, '');
+    
+    if (!cleanMyNumber || !cleanPartnerNumber) {
+      console.error('❌ Phone numbers contain no digits:', { cleanMyNumber, cleanPartnerNumber });
+      setError('Cannot invite AI Oracle: Phone numbers must contain digits');
+      return;
+    }
+
+    console.log('🤖 Inviting bot with validated numbers:', { myNumber: cleanMyNumber, partner: cleanPartnerNumber });
+
     // Notify other participants that bot invitation is starting
     socketRef.current?.emit('bot-invitation-started', {
       roomParticipants: [myNumber, livekitCallPartner]
@@ -1123,7 +1188,7 @@ const LandingPage: React.FC = () => {
       const botServerUrl = import.meta.env.VITE_BOT_SERVER_URL || 'http://localhost:4000';
       console.log('🤖 Using bot server URL:', botServerUrl);
       
-      const response = await fetch(`${botServerUrl}/join-room?number1=${encodeURIComponent(myNumber)}&number2=${encodeURIComponent(livekitCallPartner)}`);
+      const response = await fetch(`${botServerUrl}/join-room?number1=${encodeURIComponent(cleanMyNumber)}&number2=${encodeURIComponent(cleanPartnerNumber)}`);
       const result = await response.json();
       
       if (result.success) {
