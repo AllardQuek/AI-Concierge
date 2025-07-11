@@ -1240,7 +1240,7 @@ const LandingPage: React.FC = () => {
       setError(`Failed to connect to LiveKit room: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return;
     }
-    
+
     console.log('🎤 Creating local audio track...');
     try {
       // First, test microphone access with getUserMedia to ensure permissions
@@ -1443,7 +1443,7 @@ const LandingPage: React.FC = () => {
     // Initial participants update
     updateParticipantsList();
     
-    // Check for existing remote tracks when we join
+    // Check for existing remote tracks when we join and ensure proper subscription
     console.log('🔍 Checking for existing remote participants and tracks...');
     room.remoteParticipants.forEach((participant) => {
       console.log(`👤 Existing participant: ${participant.identity}`);
@@ -1452,20 +1452,24 @@ const LandingPage: React.FC = () => {
       participant.trackPublications.forEach((publication) => {
         console.log(`   📡 Existing track: ${publication.trackSid} (${publication.kind}, subscribed: ${publication.isSubscribed})`);
         
-        // If track is already subscribed, manually trigger the subscription handler
-        if (publication.isSubscribed && publication.track) {
-          console.log('🔄 Manually handling existing subscribed track');
-          // Trigger track subscription manually
-          room.emit('trackSubscribed', publication.track, publication, participant);
+        // Force subscription to existing audio tracks
+        if (publication.kind === 'audio') {
+          if (publication.isSubscribed && publication.track) {
+            console.log('🔄 Manually handling existing subscribed audio track');
+            // Directly call our track subscription handler
+            handleTrackSubscription(publication.track, publication, participant);
+          } else if (!publication.isSubscribed) {
+            console.log('🔄 Subscribing to existing unsubscribed audio track');
+            // Force subscription to the track
+            publication.setSubscribed(true);
+          }
         }
       });
     });
     
-    // Handle remote audio tracks - using Map to handle multiple participants
-    const remoteAudioElements = new Map<string, HTMLAudioElement>();
-    
-    room.on('trackSubscribed', (track, publication, participant) => {
-      console.log('🎵 Track subscribed:');
+    // Define track subscription handler as a separate function for reuse
+    const handleTrackSubscription = (track: any, publication: any, participant: any) => {
+      console.log('🎵 Handling track subscription:');
       console.log(`   From: ${participant.identity}`);
       console.log(`   Track kind: ${track.kind}`);
       console.log(`   Track source: ${track.source}`);
@@ -1585,6 +1589,21 @@ const LandingPage: React.FC = () => {
           console.error('❌ Error setting up audio playback for', participant.identity, ':', error);
         }
       }
+    };
+    
+    // Handle remote audio tracks - using Map to handle multiple participants
+    const remoteAudioElements = new Map<string, HTMLAudioElement>();
+    
+    room.on('trackSubscribed', (track, publication, participant) => {
+      console.log('🎵 Track subscribed event fired:');
+      console.log(`   From: ${participant.identity}`);
+      console.log(`   Track kind: ${track.kind}`);
+      console.log(`   Track source: ${track.source}`);
+      console.log(`   Track SID: ${track.sid}`);
+      console.log(`   Publication SID: ${publication.trackSid}`);
+      
+      // Use the same handler for both existing and new track subscriptions
+      handleTrackSubscription(track, publication, participant);
     });
     
     // Handle track unsubscription
