@@ -6,7 +6,7 @@ const envFile = process.env.NODE_ENV === 'production'
 dotenv.config({ path: envFile });
 
 const { RoomServiceClient, AccessToken } = require('livekit-server-sdk');
-const { Room } = require('livekit-client'); // FIXED: Added missing import
+const { Room } = require('livekit-client');
 const express = require('express');
 const cors = require('cors');
 
@@ -54,8 +54,37 @@ console.log(`[ORACLE] 🗣️ TTS Enabled: ${process.env.ENABLE_TTS || 'false'}`
 const roomService = new RoomServiceClient(LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
 
 function getRoomName(numberA, numberB) {
-  const cleanA = numberA.replace(/\D/g, '');
-  const cleanB = numberB.replace(/\D/g, '');
+  // Validate that both numbers are provided and non-empty
+  if (!numberA || !numberB) {
+    throw new Error(`Invalid phone numbers: numberA="${numberA}", numberB="${numberB}". Both numbers must be provided.`);
+  }
+  
+  // Normalize both numbers to ensure consistent room naming (matching client logic)
+  const normalizeForRoom = (phoneNumber) => {
+    const digitsOnly = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
+    
+    // Handle 8-digit Singapore mobile numbers (without country code)
+    if (digitsOnly.length === 8 && (digitsOnly.startsWith('8') || digitsOnly.startsWith('9'))) {
+      return `65${digitsOnly}`; // Add 65 prefix for consistency
+    }
+    
+    // Handle numbers that already have 65 prefix
+    if (digitsOnly.startsWith('65') && digitsOnly.length === 10) {
+      return digitsOnly;
+    }
+    
+    // Return as-is if we can't normalize
+    return digitsOnly;
+  };
+  
+  const cleanA = normalizeForRoom(numberA);
+  const cleanB = normalizeForRoom(numberB);
+  
+  // Validate that cleaning didn't result in empty strings
+  if (!cleanA || !cleanB) {
+    throw new Error(`Invalid phone numbers after cleaning: cleanA="${cleanA}", cleanB="${cleanB}". Numbers must contain digits.`);
+  }
+  
   const [first, second] = [cleanA, cleanB].sort();
   return `room-${first}-${second}`;
 }
@@ -87,7 +116,16 @@ async function createBotToken(room, identity) {
 }
 
 async function joinExistingRoom(numberA, numberB) {
-  const roomName = getRoomName(numberA, numberB);
+  console.log(`[BOT] Attempting to join room with numbers: numberA="${numberA}", numberB="${numberB}"`);
+  
+  let roomName;
+  try {
+    roomName = getRoomName(numberA, numberB);
+    console.log(`[BOT] Generated room name: ${roomName}`);
+  } catch (err) {
+    console.error(`[BOT] Error generating room name:`, err.message);
+    throw err;
+  }
   
   if (activeRooms[roomName]) {
     console.log(`[BOT] Already joined room: ${roomName}`);
@@ -750,7 +788,15 @@ app.get('/leave-room', async (req, res) => {
   const { number1, number2 } = req.query;
   if (!number1 || !number2) return res.status(400).send('Missing number1 or number2');
   
-  const roomName = getRoomName(number1, number2);
+  let roomName;
+  try {
+    roomName = getRoomName(number1, number2);
+  } catch (err) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid phone numbers: ' + err.message
+    });
+  }
   
   if (!activeRooms[roomName]) {
     return res.json({ 

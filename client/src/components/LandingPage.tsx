@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { SocketService } from '../services/socket';
 import { WebRTCService } from '../services/webrtc';
 import CallInterface, { CallState as CallInterfaceState } from './CallInterface';
@@ -16,10 +16,121 @@ type CallState = 'idle' | 'outgoing' | 'incoming' | 'connected';
 
 // Deterministic room name for 1:1 calls (digits only, no + or spaces)
 function getRoomName(numberA: string, numberB: string): string {
-  const cleanA = numberA.replace(/\D/g, '');
-  const cleanB = numberB.replace(/\D/g, '');
+  // Normalize both numbers to ensure consistent room naming
+  const normalizeForRoom = (phoneNumber: string): string => {
+    const digitsOnly = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
+    
+    // Handle 8-digit Singapore mobile numbers (without country code)
+    if (digitsOnly.length === 8 && (digitsOnly.startsWith('8') || digitsOnly.startsWith('9'))) {
+      return `65${digitsOnly}`; // Add 65 prefix for consistency
+    }
+    
+    // Handle numbers that already have 65 prefix
+    if (digitsOnly.startsWith('65') && digitsOnly.length === 10) {
+      return digitsOnly;
+    }
+    
+    // Return as-is if we can't normalize
+    return digitsOnly;
+  };
+  
+  const cleanA = normalizeForRoom(numberA);
+  const cleanB = normalizeForRoom(numberB);
   const [first, second] = [cleanA, cleanB].sort();
   return `room-${first}-${second}`;
+}
+
+// Test audio levels to ensure microphone is working before joining LiveKit
+async function testAudioLevelsBeforeJoining(stream: MediaStream): Promise<void> {
+  return new Promise((resolve) => {
+    console.log('🔊 Testing audio levels from microphone...');
+    
+    try {
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      source.connect(analyser);
+      
+      analyser.fftSize = 256;
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      
+      let testCount = 0;
+      let audioDetected = false;
+      const maxTests = 20; // Test for 2 seconds (20 * 100ms)
+      
+      const testInterval = setInterval(() => {
+        analyser.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+        
+        console.log(`🎤 Audio level test ${testCount + 1}: ${average.toFixed(2)}`);
+        
+        if (average > 2) { // Very low threshold to detect any audio
+          audioDetected = true;
+          console.log('✅ Audio detected from microphone!');
+          clearInterval(testInterval);
+          audioContext.close();
+          resolve();
+          return;
+        }
+        
+        testCount++;
+        if (testCount >= maxTests) {
+          clearInterval(testInterval);
+          audioContext.close();
+          if (!audioDetected) {
+            console.warn('⚠️ No audio detected from microphone - please check microphone settings');
+          }
+          resolve();
+        }
+      }, 100);
+      
+    } catch (error) {
+      console.warn('⚠️ Could not test audio levels:', error);
+      resolve();
+    }
+  });
+}
+
+// Toast context and provider
+const ToastContext = createContext<(msg: string) => void>(() => {});
+
+const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [toast, setToast] = useState<string | null>(null);
+  const [visible, setVisible] = useState(false);
+  const timeoutRef = useRef<number | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setVisible(true);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = window.setTimeout(() => {
+      setVisible(false);
+    }, 4000);
+  };
+
+  const handleClose = () => {
+    setVisible(false);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+  };
+
+  return (
+    <ToastContext.Provider value={showToast}>
+      {children}
+      {toast && visible && (
+        <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50">
+          <div className="bg-gray-900 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-fade-in">
+            <span>{toast}</span>
+            <button onClick={handleClose} className="ml-4 text-white hover:text-gray-300 focus:outline-none">✖️</button>
+          </div>
+        </div>
+      )}
+    </ToastContext.Provider>
+  );
+};
+
+function useToast() {
+  return useContext(ToastContext);
 }
 
 const LandingPage: React.FC = () => {
@@ -65,6 +176,19 @@ const LandingPage: React.FC = () => {
   const [participants, setParticipants] = useState<Array<{ identity: string; isBot: boolean }>>([]);
   const [isInvitingBot, setIsInvitingBot] = useState(false);
   const liveKitRoomRef = useRef<Room | null>(null);
+  
+  // Refs to track current values for event handlers
+  const livekitCallPartnerRef = useRef<string>('');
+  const myNumberRef = useRef<string>('');
+  
+  // Update refs when state changes
+  useEffect(() => {
+    livekitCallPartnerRef.current = livekitCallPartner;
+  }, [livekitCallPartner]);
+  
+  useEffect(() => {
+    myNumberRef.current = myNumber;
+  }, [myNumber]);
 
   // Handle phone number input with filtering
   const handlePhoneNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -85,6 +209,7 @@ const LandingPage: React.FC = () => {
       }
     }
     
+    console.log(`📝 Phone number input changed: "${friendNumber}" -> "${value}"`);
     setFriendNumber(value);
   };
 
@@ -296,21 +421,53 @@ const LandingPage: React.FC = () => {
   useEffect(() => {
     if (!socketRef.current) return;
 
-    const handleSocketDisconnect = () => {
-      console.log('🔌 Socket disconnected, cleaning up call state');
+    const handleSocketDisconnect = (reason: string) => {
+      console.log('🔌 Socket disconnected, reason:', reason);
+      console.log('🔌 Disconnect timestamp:', new Date().toISOString());
+      console.log('🔌 Current call state:', callState);
+      console.log('🔌 LiveKit call state:', livekitCallState);
+      
       cleanup();
       setCallState('idle');
       setError('Connection lost. Please try again.');
       updateCurrentCallPartner('');
     };
 
-    socketRef.current.on('disconnect', handleSocketDisconnect);
+    const handleSocketConnect = () => {
+      console.log('🔌 Socket reconnected successfully');
+      console.log('🔌 Reconnect timestamp:', new Date().toISOString());
+      setIsConnected(true);
+      setError('');
+      
+      // Re-register the user number when reconnecting
+      if (myNumber && socketRef.current) {
+        console.log(`📝 Re-registering user number after reconnect: ${myNumber}`);
+        socketRef.current.joinRoom(myNumber);
+      }
+    };
 
-    // Clean up listener on unmount
+    const handleSocketReconnectAttempt = (attemptNumber: number) => {
+      console.log('🔌 Socket reconnection attempt:', attemptNumber);
+    };
+
+    const handleSocketReconnectFailed = () => {
+      console.error('🔌 Socket reconnection failed');
+      setError('Unable to reconnect to server');
+    };
+
+    socketRef.current.on('disconnect', handleSocketDisconnect);
+    socketRef.current.on('connect', handleSocketConnect);
+    socketRef.current.on('reconnect_attempt', handleSocketReconnectAttempt);
+    socketRef.current.on('reconnect_failed', handleSocketReconnectFailed);
+
+    // Clean up listeners on unmount
     return () => {
       socketRef.current?.off('disconnect', handleSocketDisconnect);
+      socketRef.current?.off('connect', handleSocketConnect);
+      socketRef.current?.off('reconnect_attempt', handleSocketReconnectAttempt);
+      socketRef.current?.off('reconnect_failed', handleSocketReconnectFailed);
     };
-  }, []);
+  }, [socketRef.current, callState, livekitCallState]);
 
   // Auto-cleanup when call returns to idle after being connected
   useEffect(() => {
@@ -322,22 +479,83 @@ const LandingPage: React.FC = () => {
     }
   }, [callState, currentCallPartner]);
 
+  // Recovery mechanism for stuck states
+  useEffect(() => {
+    // If we're stuck in incoming state for too long, auto-cleanup
+    if (callState === 'incoming') {
+      const stuckTimeout = setTimeout(() => {
+        console.log('⚠️ Call stuck in incoming state for 60 seconds, auto-cleaning up');
+        cleanup();
+        setCallState('idle');
+        setError('Call timed out - please try again');
+      }, 60000); // 60 seconds
+
+      return () => clearTimeout(stuckTimeout);
+    }
+  }, [callState]);
+
   // Update connection stats state when ref changes
   useEffect(() => {
     setConnectionStats(connectionStatsRef.current);
   }, [connectionStatsRef.current]);
 
+  // Debug friendNumber state changes
+  useEffect(() => {
+    console.log(`📱 friendNumber state changed to: "${friendNumber}"`);
+  }, [friendNumber]);
+
   // LiveKit call signaling handlers
   useEffect(() => {
     if (!socketRef.current) return;
+    
+    console.log('🔧 Setting up LiveKit event handlers...');
+    
     // Incoming LiveKit call
     const onUserCallingLivekit = ({ callerCode }: { callerCode: string }) => {
+      console.log(`📞 Received LiveKit call from: "${callerCode}"`);
+      
+      // Validate callerCode before setting it
+      if (!callerCode || callerCode.trim() === '') {
+        console.error(`❌ Invalid callerCode received: "${callerCode}"`);
+        setError('Received invalid caller information');
+        return;
+      }
+      
       setLivekitCallPartner(callerCode);
       setLivekitCallState('incoming');
+      console.log(`✅ LiveKit call partner set to: "${callerCode}"`);
     };
     // Call accepted by callee
-    const onCallAcceptedLivekit = ({ calleeCode }: { calleeCode: string }) => {
-      joinLiveKitRoom(calleeCode);
+    const onCallAcceptedLivekit = () => {
+      console.log(`🎵 call-accepted-livekit event received!`);
+      console.log(`   Event timestamp: ${new Date().toISOString()}`);
+      
+      // Get current values from refs (more reliable than closures)
+      const currentPartner = livekitCallPartnerRef.current;
+      const currentMyNumber = myNumberRef.current;
+      
+      console.log(`   Current livekitCallPartner: "${currentPartner}"`);
+      console.log(`   Current myNumber: "${currentMyNumber}"`);
+      
+      // Validate livekitCallPartner before joining room
+      if (!currentPartner || currentPartner.trim() === '') {
+        console.error('❌ Cannot join LiveKit room: livekitCallPartner is empty');
+        setError('Invalid call partner information');
+        setLivekitCallState('idle');
+        return;
+      }
+      
+      // Validate myNumber is available
+      if (!currentMyNumber || currentMyNumber.trim() === '') {
+        console.error('❌ Cannot join LiveKit room: myNumber is empty');
+        setError('Invalid user number information');
+        setLivekitCallState('idle');
+        return;
+      }
+      
+      console.log(`✅ Validated numbers - My: "${currentMyNumber}", Partner: "${currentPartner}"`);
+      console.log(`🚀 Starting room join process...`);
+      joinLiveKitRoom(currentPartner);
       setLivekitCallState('connected');
       startCallDurationTimer();
     };
@@ -348,32 +566,32 @@ const LandingPage: React.FC = () => {
       setError('Call was declined');
       stopCallDurationTimer();
     };
-    
     // Bot invitation state handlers
     const onBotInvitationStarted = () => {
       console.log('🤖 Bot invitation started by other participant');
       setIsInvitingBot(true);
     };
-    
     const onBotInvitationCompleted = () => {
       console.log('🤖 Bot invitation completed');
       setIsInvitingBot(false);
     };
-    
     (socketRef.current as any).on('user-calling-livekit', onUserCallingLivekit);
     (socketRef.current as any).on('call-accepted-livekit', onCallAcceptedLivekit);
     (socketRef.current as any).on('call-declined-livekit', onCallDeclinedLivekit);
     (socketRef.current as any).on('bot-invitation-started', onBotInvitationStarted);
     (socketRef.current as any).on('bot-invitation-completed', onBotInvitationCompleted);
     
+    console.log('✅ LiveKit event handlers registered successfully');
+    
     return () => {
+      console.log('🧹 Cleaning up LiveKit event handlers...');
       (socketRef.current as any)?.off('user-calling-livekit', onUserCallingLivekit);
       (socketRef.current as any)?.off('call-accepted-livekit', onCallAcceptedLivekit);
       (socketRef.current as any)?.off('call-declined-livekit', onCallDeclinedLivekit);
       (socketRef.current as any)?.off('bot-invitation-started', onBotInvitationStarted);
       (socketRef.current as any)?.off('bot-invitation-completed', onBotInvitationCompleted);
     };
-  }, [socketRef.current]);
+  }, [socketRef.current]); // Removed livekitCallPartner and myNumber dependencies
 
   const startRingingEffect = () => {
     // Try to vibrate on mobile devices
@@ -445,12 +663,14 @@ const LandingPage: React.FC = () => {
 
     webrtcRef.current.onConnectionStateChange((state: string) => {
       console.log('🔗 WebRTC connection state:', state);
+      console.log('📱 Current call state before WebRTC state change:', callState);
       
       if (state === 'connected') {
         // Track connection start time for stability monitoring
         connectionStartTimeRef.current = Date.now();
         connectionStatsRef.current.connectionsSucceeded++;
         
+        console.log('✅ Transitioning call state from', callState, 'to connected');
         setCallState('connected');
         setError(''); // Clear any previous errors
         startCallDurationTimer(); // Start timing the call
@@ -556,12 +776,19 @@ const LandingPage: React.FC = () => {
     if (!socketRef.current) return;
 
     socketRef.current.on('call-answered', async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
-      console.log('📞 Call was answered');
+      console.log('📞 Call was answered by remote peer');
       if (webrtcRef.current) {
-        await webrtcRef.current.setRemoteAnswer(answer);
-        setCallState('connected');
-        startCallDurationTimer(); // Start the timer when call is answered
-        clearTimeout(callTimeoutRef.current!); // Clear connection timeout
+        try {
+          await webrtcRef.current.setRemoteAnswer(answer);
+          console.log('✅ Remote answer set successfully');
+          // The WebRTC connection state change handler will set call state to 'connected'
+          clearTimeout(callTimeoutRef.current!); // Clear connection timeout
+        } catch (error) {
+          console.error('❌ Failed to set remote answer:', error);
+          cleanup();
+          setError('Failed to establish connection - please try again');
+          setCallState('idle');
+        }
       }
     });
 
@@ -589,7 +816,8 @@ const LandingPage: React.FC = () => {
       }
       
       setCallState('idle');
-      setError('Call ended by other party');
+      // Instead of setError('Call ended by other party'), show toast
+      showToast('Call ended by other party');
       clearTimeout(callTimeoutRef.current!); // Clear connection timeout
     });
 
@@ -605,6 +833,12 @@ const LandingPage: React.FC = () => {
   const handleAnswerCall = async () => {
     try {
       stopRingingEffect();
+      
+      // Validate current state
+      if (callState !== 'incoming') {
+        console.warn('⚠️ Attempted to answer call in wrong state:', callState);
+        return;
+      }
       
       if (!webrtcRef.current) {
         await initializeCallServices();
@@ -640,16 +874,22 @@ const LandingPage: React.FC = () => {
         answer
       });
       
-      console.log('✅ Call answered successfully');
-      setCallState('connected');
+      console.log('✅ Call answer sent successfully');
+      // DON'T set call state to 'connected' here - wait for WebRTC connection
+      // The WebRTC connection state change handler will set it to 'connected'
+      
+      // Set a timeout for the recipient as well
+      callTimeoutRef.current = window.setTimeout(() => {
+        console.log('⏰ Recipient connection timeout after 30 seconds');
+        cleanup();
+        setError('Connection timeout - please try again');
+        setCallState('idle');
+      }, 30000); // 30 second timeout
       
       // Clean up the stored offer
       if ((window as any).incomingOffer) {
         delete (window as any).incomingOffer;
       }
-      
-      // Start the call duration timer
-      startCallDurationTimer();
       
     } catch (err) {
       console.error('❌ Failed to answer call:', err);
@@ -691,7 +931,7 @@ const LandingPage: React.FC = () => {
       
       updateCurrentCallPartner(normalizedNumber);
       setCallState('outgoing');
-      setError('');
+      setError(''); // Clear error before starting call
       
       if (!webrtcRef.current) {
         await initializeCallServices();
@@ -716,20 +956,83 @@ const LandingPage: React.FC = () => {
       setError('Cannot start a new call while another call is in progress.');
       return;
     }
-    // Signal B via Socket.IO
-    socketRef.current?.emit('call-user-livekit', {
-      targetCode: friendNumber,
-      callerCode: myNumber,
-    });
-    setLivekitCallPartner(friendNumber);
-    setLivekitCallState('outgoing');
+    
+    try {
+      // Normalize the phone number before calling (same as regular calls)
+      const normalizedNumber = normalizePhoneNumber(friendNumber.trim());
+      console.log(`📞 LiveKit Phone Number Normalization:`);
+      console.log(`   Original input: "${friendNumber.trim()}"`);
+      console.log(`   Normalized to: "${normalizedNumber}"`);
+      
+      // Pre-request microphone permissions to ensure user gesture requirement
+      console.log('🎤 Pre-requesting microphone permissions for caller...');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop()); // Stop test stream
+      console.log('✅ Microphone permissions granted for caller');
+      
+      // Signal B via Socket.IO
+      socketRef.current?.emit('call-user-livekit', {
+        targetCode: normalizedNumber,
+        callerCode: myNumber,
+      });
+      setLivekitCallPartner(normalizedNumber);
+      setLivekitCallState('outgoing');
+      console.log('📞 LiveKit call initiated, waiting for callee to accept...');
+      // Wait for call-accepted-livekit event before joining room
+      setError(''); // Clear error before starting call
+    } catch (error) {
+      console.error('❌ Failed to initiate LiveKit call:', error);
+      setError(`Failed to initiate call: ${error instanceof Error ? error.message : 'Microphone permission required'}`);
+    }
   };
 
   const handleAcceptLiveKitCall = async () => {
-    socketRef.current?.emit('accept-call-livekit', { callerCode: livekitCallPartner, calleeCode: myNumber });
-    await joinLiveKitRoom(livekitCallPartner);
-    setLivekitCallState('connected');
-    startCallDurationTimer();
+    console.log('📞 Callee accepting LiveKit call...');
+    console.log(`   Caller code: "${livekitCallPartner}"`);
+    console.log(`   Callee code: "${myNumber}"`);
+    
+    if (!socketRef.current) {
+      console.error('❌ Socket not available for accepting call');
+      setError('Socket connection not available');
+      return;
+    }
+    
+    // Validate numbers before proceeding
+    if (!livekitCallPartner || livekitCallPartner.trim() === '') {
+      console.error('❌ Cannot accept call: livekitCallPartner is empty');
+      setError('Invalid call partner information');
+      return;
+    }
+    
+    if (!myNumber || myNumber.trim() === '') {
+      console.error('❌ Cannot accept call: myNumber is empty');
+      setError('Invalid user number information');
+      return;
+    }
+    
+    try {
+      console.log('📡 Sending accept call signal to server...');
+      socketRef.current.emit('accept-call-livekit', { callerCode: livekitCallPartner, calleeCode: myNumber });
+      
+      console.log('🚀 Callee joining LiveKit room immediately...');
+      
+      // Ensure we have user gesture for audio by requesting permissions first
+      console.log('🎤 Requesting microphone permissions for callee...');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop()); // Stop test stream
+      console.log('✅ Microphone permissions granted for callee');
+      
+      // Join room immediately when accepting - no need to wait for server confirmation
+      await joinLiveKitRoom(livekitCallPartner);
+      setLivekitCallState('connected');
+      startCallDurationTimer();
+      
+      console.log('✅ Callee successfully joined LiveKit room');
+    } catch (error) {
+      console.error('❌ Failed to accept LiveKit call:', error);
+      setError(`Failed to accept call: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setLivekitCallState('idle');
+    }
   };
 
   const handleDeclineLiveKitCall = () => {
@@ -772,14 +1075,447 @@ const LandingPage: React.FC = () => {
   const joinLiveKitRoom = async (otherNumber: string) => {
     const livekitUrl = import.meta.env.VITE_LIVEKIT_URL;
     const tokenApiUrl = import.meta.env.VITE_LIVEKIT_TOKEN_URL;
+    
+    // Validate phone numbers before generating room name
+    if (!myNumber || !otherNumber) {
+      console.error('❌ Invalid phone numbers for LiveKit room:', { myNumber, otherNumber });
+      setError('Invalid phone numbers for LiveKit call');
+      return;
+    }
+    
+    console.log('🎵 LiveKit Room Setup:');
+    console.log(`   My number: "${myNumber}"`);
+    console.log(`   Other number: "${otherNumber}"`);
+    
     const roomName = getRoomName(myNumber, otherNumber);
-    const identity = myNumber;
-    const response = await fetch(`${tokenApiUrl}?room=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(identity)}`);
-    const { token } = await response.json();
+    
+    // Normalize identity to match room name format (digits only)
+    const normalizeForIdentity = (phoneNumber: string): string => {
+      const digitsOnly = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
+      
+      // Handle 8-digit Singapore mobile numbers (without country code)
+      if (digitsOnly.length === 8 && (digitsOnly.startsWith('8') || digitsOnly.startsWith('9'))) {
+        return `65${digitsOnly}`; // Add 65 prefix for consistency
+      }
+      
+      // Handle numbers that already have 65 prefix
+      if (digitsOnly.startsWith('65') && digitsOnly.length === 10) {
+        return digitsOnly;
+      }
+      
+      // Return as-is if we can't normalize
+      return digitsOnly;
+    };
+    
+    const identity = normalizeForIdentity(myNumber);
+    
+    console.log(`   Generated room name: ${roomName}`);
+    console.log(`   Original myNumber: "${myNumber}"`);
+    console.log(`   Normalized identity: "${identity}"`);
+    console.log(`   LiveKit URL: ${livekitUrl}`);
+        console.log(`   Token API URL: ${tokenApiUrl}`);
+    
+    let token;
+    try {
+      console.log(`🔗 Requesting token from: ${tokenApiUrl}?room=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(identity)}`);
+      const response = await fetch(`${tokenApiUrl}?room=${encodeURIComponent(roomName)}&identity=${encodeURIComponent(identity)}`);
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`❌ Token request failed: ${response.status} ${response.statusText}`);
+        console.error(`❌ Error response: ${errorText}`);
+        throw new Error(`Token request failed: ${response.status} ${response.statusText}`);
+      }
+      
+      const tokenData = await response.json();
+      token = tokenData.token;
+      
+      if (!token) {
+        console.error('❌ No token received from server');
+        throw new Error('No token received from server');
+      }
+      
+      console.log(`🎟️ Token received: ${token.substring(0, 50)}...`);
+      console.log(`🎟️ Token length: ${token.length} characters`);
+    } catch (error) {
+      console.error('❌ Failed to get LiveKit token:', error);
+      setError(`Failed to get LiveKit token: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return;
+    }
+    
     const room = new Room();
-    await room.connect(livekitUrl, token);
-    const audioTrack = await createLocalAudioTrack();
-    await room.localParticipant.publishTrack(audioTrack);
+    
+    // Handle remote audio tracks - using Map to handle multiple participants
+    const remoteAudioElements = new Map<string, HTMLAudioElement>();
+    
+    // Define track subscription handler as a separate function for reuse
+    const handleTrackSubscription = (track: any, publication: any, participant: any) => {
+      console.log('🎵 Handling track subscription:');
+      console.log(`   From: ${participant.identity}`);
+      console.log(`   Track kind: ${track.kind}`);
+      console.log(`   Track source: ${track.source}`);
+      console.log(`   Track SID: ${track.sid}`);
+      console.log(`   Publication SID: ${publication.trackSid}`);
+      
+      if (track.kind === 'audio') {
+        console.log('🎤 Audio track received, setting up playback...');
+        
+        // Clean up any existing audio element for this participant
+        const existingAudio = remoteAudioElements.get(participant.identity);
+        if (existingAudio) {
+          try { 
+            console.log('🔄 Detaching previous audio element for:', participant.identity);
+            track.detach(existingAudio);
+            existingAudio.remove(); 
+            remoteAudioElements.delete(participant.identity);
+          } catch (err) {
+            console.warn('⚠️ Error detaching previous audio:', err);
+          }
+        }
+        
+        try {
+          const audioElement = track.attach() as HTMLAudioElement;
+          console.log('🔗 Audio element attached for:', participant.identity);
+          
+          // Configure audio element for optimal playback
+          audioElement.autoplay = true;
+          audioElement.volume = 1.0;
+          audioElement.muted = false;
+          audioElement.setAttribute('playsinline', 'true'); // Important for mobile
+          audioElement.style.display = 'none'; // Hide the audio element
+          
+          // Store the audio element
+          remoteAudioElements.set(participant.identity, audioElement);
+          
+          // Add to DOM first, then set up event listeners
+          document.body.appendChild(audioElement);
+          console.log('✅ Remote audio element added to DOM for:', participant.identity);
+
+          // Handle autoplay policy with user-friendly error handling
+          const playAudio = async () => {
+            try {
+              await audioElement.play();
+              console.log('▶️ Audio playback started successfully for', participant.identity);
+            } catch (err: any) {
+              console.warn('⚠️ Audio playback was blocked by browser autoplay policy for', participant.identity, err);
+              
+              // Show user-friendly message for autoplay issues
+              if (err.name === 'NotAllowedError') {
+                console.log('🔊 Requesting user interaction to enable audio playback...');
+                setError('Click anywhere to enable audio playback');
+                
+                // Add a one-time click handler to enable audio
+                const enableAudio = () => {
+                  audioElement.play().then(() => {
+                    console.log('▶️ Audio enabled after user interaction for', participant.identity);
+                    setError(''); // Clear the error message
+                  }).catch((retryErr) => {
+                    console.error('❌ Still failed to play audio after user interaction:', retryErr);
+                  });
+                  document.removeEventListener('click', enableAudio);
+                };
+                
+                document.addEventListener('click', enableAudio, { once: true });
+              }
+            }
+          };
+          
+          // Try to play immediately, but handle autoplay gracefully
+          playAudio();
+          
+          // Test audio levels after a short delay
+          setTimeout(() => {
+            console.log('🔊 Audio element test for', participant.identity, ':', {
+              volume: audioElement.volume,
+              muted: audioElement.muted,
+              paused: audioElement.paused,
+              currentTime: audioElement.currentTime,
+              duration: audioElement.duration,
+              readyState: audioElement.readyState,
+              networkState: audioElement.networkState
+            });
+            
+            // Ensure volume is at maximum and not muted
+            audioElement.volume = 1.0;
+            audioElement.muted = false;
+            console.log('🔊 Audio settings optimized for:', participant.identity);
+            
+            // If audio is still paused, try to resume it
+            if (audioElement.paused) {
+              console.log('⚠️ Audio is paused, attempting to resume...');
+              audioElement.play().catch((err) => {
+                console.warn('Could not resume paused audio:', err);
+              });
+            }
+          }, 1000);
+          
+          // Add event listeners for debugging
+          audioElement.onloadedmetadata = () => {
+            console.log('✅ Audio metadata loaded for', participant.identity, ', duration:', audioElement.duration);
+          };
+          
+          audioElement.oncanplay = () => {
+            console.log('✅ Audio can play for', participant.identity);
+          };
+          
+          audioElement.onplay = () => {
+            console.log('🎵 Audio playback started for', participant.identity);
+          };
+          
+          audioElement.onerror = (error) => {
+            console.error('❌ Audio playback error for', participant.identity, ':', error);
+          };
+          
+        } catch (error) {
+          console.error('❌ Error setting up audio playback for', participant.identity, ':', error);
+        }
+      }
+    };
+    
+    // Add connection event listeners for debugging
+    room.on('connected', () => {
+      console.log('🟢 LiveKit room connected successfully');
+      console.log(`   Room name: ${room.name}`);
+      console.log(`   Local participant SID: ${room.localParticipant.sid}`);
+      console.log(`   Local participant identity: ${room.localParticipant.identity}`);
+    });
+    
+    room.on('disconnected', (reason) => {
+      console.log('🔴 LiveKit room disconnected:', reason);
+    });
+    
+    room.on('reconnecting', () => {
+      console.log('🔄 LiveKit room reconnecting...');
+    });
+    
+    room.on('reconnected', () => {
+      console.log('🟢 LiveKit room reconnected');
+    });
+    
+    // Add audio level monitoring
+    room.on('localTrackPublished', (publication) => {
+      console.log('📡 Local track published:', publication.trackSid, publication.kind);
+      
+      if (publication.kind === 'audio' && publication.track) {
+        console.log('🎤 Setting up audio level monitoring for local track');
+        
+        // Monitor audio levels to detect if microphone is working
+        const audioTrack = publication.track as any;
+        if (audioTrack.mediaStreamTrack) {
+          // Create audio context to monitor levels (if available)
+          try {
+            const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const source = audioContext.createMediaStreamSource(new MediaStream([audioTrack.mediaStreamTrack]));
+            const analyser = audioContext.createAnalyser();
+            source.connect(analyser);
+            
+            analyser.fftSize = 32;
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            
+            let silenceCount = 0;
+            const checkAudioLevel = () => {
+              analyser.getByteFrequencyData(dataArray);
+              const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+              
+              if (average < 5) {
+                silenceCount++;
+                if (silenceCount % 10 === 0) { // Log every 10 silence checks
+                  console.log(`🔇 Audio level check: ${average.toFixed(2)} (silence count: ${silenceCount})`);
+                }
+              } else {
+                if (silenceCount > 0) {
+                  console.log(`🎤 Audio detected! Level: ${average.toFixed(2)} (ending silence streak of ${silenceCount})`);
+                  silenceCount = 0;
+                }
+              }
+            };
+            
+            const audioLevelInterval = setInterval(checkAudioLevel, 1000);
+            
+            // Clean up when room disconnects
+            room.once('disconnected', () => {
+              clearInterval(audioLevelInterval);
+              audioContext.close();
+            });
+            
+          } catch (error) {
+            console.warn('⚠️ Could not set up audio level monitoring:', error);
+          }
+        }
+      }
+    });
+    
+    // Monitor for silence detection events from LiveKit
+    room.on('localTrackUnpublished', (publication) => {
+      console.log('📡 Local track unpublished:', publication.trackSid, publication.kind);
+    });
+    
+    // Add error handling for connection issues
+    room.on('disconnected', (reason) => {
+      console.log('🔴 LiveKit connection error or disconnect:', reason);
+    });
+    
+    console.log('🔌 Connecting to LiveKit room...');
+    console.log(`   Room name: ${roomName}`);
+    console.log(`   Identity: ${identity}`);
+    console.log(`   LiveKit URL: ${livekitUrl}`);
+    
+    try {
+      await room.connect(livekitUrl, token);
+      console.log('✅ LiveKit room connection initiated successfully');
+    } catch (error) {
+      console.error('❌ Failed to connect to LiveKit room:', error);
+      setError(`Failed to connect to LiveKit room: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      return;
+    }
+
+    console.log('🎤 Creating local audio track...');
+    try {
+      // First, test microphone access with getUserMedia to ensure permissions
+      console.log('🎤 Testing microphone access...');
+      const testStream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          sampleRate: 48000,
+          channelCount: 1
+        } 
+      });
+      
+      // Verify the stream has audio tracks
+      const audioTracks = testStream.getAudioTracks();
+      console.log(`🎤 Audio tracks available: ${audioTracks.length}`);
+      
+      if (audioTracks.length === 0) {
+        throw new Error('No audio tracks available from microphone');
+      }
+      
+      // Test the audio track with a more comprehensive check
+      const testTrack = audioTracks[0];
+      console.log('🎤 Test track properties:', {
+        enabled: testTrack.enabled,
+        muted: testTrack.muted,
+        readyState: testTrack.readyState,
+        label: testTrack.label,
+        settings: testTrack.getSettings()
+      });
+      
+      // Test audio levels on the test stream before stopping it
+      await testAudioLevelsBeforeJoining(testStream);
+      
+      // Stop the test stream before creating LiveKit track
+      testStream.getTracks().forEach(track => track.stop());
+      console.log('✅ Microphone test completed successfully');
+      
+      // Now create the LiveKit audio track with the same constraints
+      const audioTrack = await createLocalAudioTrack({
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        sampleRate: 48000,
+        channelCount: 1
+      });
+      
+      console.log('✅ Local audio track created successfully:');
+      console.log(`   Track SID: ${audioTrack.sid}`);
+      console.log(`   Track kind: ${audioTrack.kind}`);
+      console.log(`   Track source: ${audioTrack.source}`);
+      console.log(`   Track is muted: ${audioTrack.isMuted}`);
+      
+      // Check MediaStreamTrack properties
+      const mediaStreamTrack = audioTrack.mediaStreamTrack;
+      if (mediaStreamTrack) {
+        console.log('🎤 MediaStreamTrack properties:');
+        console.log(`   Ready state: ${mediaStreamTrack.readyState}`);
+        console.log(`   Enabled: ${mediaStreamTrack.enabled}`);
+        console.log(`   Muted: ${mediaStreamTrack.muted}`);
+        console.log(`   Label: ${mediaStreamTrack.label}`);
+        console.log(`   Settings:`, mediaStreamTrack.getSettings());
+        
+        // Force enable the track if it's disabled
+        if (!mediaStreamTrack.enabled) {
+          console.log('⚠️ Audio track is disabled, enabling...');
+          mediaStreamTrack.enabled = true;
+        }
+        
+        // Test if the track is producing audio data
+        console.log('🔊 Testing audio data production...');
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(new MediaStream([mediaStreamTrack]));
+        const analyser = audioContext.createAnalyser();
+        source.connect(analyser);
+        
+        analyser.fftSize = 32;
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        
+        // Quick audio level test
+        let hasAudio = false;
+        for (let i = 0; i < 10; i++) {
+          analyser.getByteFrequencyData(dataArray);
+          const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+          if (average > 0) {
+            hasAudio = true;
+            console.log(`🎤 Audio data detected: level ${average.toFixed(2)}`);
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        if (!hasAudio) {
+          console.warn('⚠️ No audio data detected - microphone may be muted or disconnected');
+        }
+        
+        audioContext.close();
+      }
+      
+      // Ensure the track is not muted before publishing
+      if (audioTrack.isMuted) {
+        console.log('🔊 Audio track is muted, unmuting...');
+        await audioTrack.unmute();
+      }
+      
+      console.log('📤 Publishing local audio track...');
+      const publication = await room.localParticipant.publishTrack(audioTrack, {
+        name: 'microphone'
+      });
+      
+      console.log('✅ Local audio track published successfully:');
+      console.log(`   Publication SID: ${publication.trackSid}`);
+      console.log(`   Publication kind: ${publication.kind}`);
+      console.log(`   Publication source: ${publication.source}`);
+      console.log(`   Publication subscribed: ${publication.isSubscribed}`);
+      console.log(`   Publication enabled: ${publication.isEnabled}`);
+      console.log(`   Publication muted: ${publication.isMuted}`);
+      
+      // Wait a moment and check if the publication is working
+      setTimeout(() => {
+        console.log('🔊 Post-publish track status check:');
+        console.log(`   Track is muted: ${audioTrack.isMuted}`);
+        console.log(`   Publication is muted: ${publication.isMuted}`);
+        console.log(`   Publication is enabled: ${publication.isEnabled}`);
+        console.log(`   MediaStreamTrack enabled: ${mediaStreamTrack?.enabled}`);
+        console.log(`   MediaStreamTrack muted: ${mediaStreamTrack?.muted}`);
+        console.log(`   MediaStreamTrack readyState: ${mediaStreamTrack?.readyState}`);
+        
+        // Force unmute if still muted
+        if (audioTrack.isMuted || publication.isMuted) {
+          console.log('⚠️ Track still muted, forcing unmute...');
+          audioTrack.unmute().then(() => {
+            console.log('✅ Track unmuted successfully');
+          }).catch((error) => {
+            console.error('❌ Failed to unmute track:', error);
+          });
+        }
+      }, 1000);
+      
+    } catch (error) {
+      console.error('❌ Failed to create or publish audio track:', error);
+      throw error;
+    }
+    
     liveKitRoomRef.current = room;
     
     // Initialize participants list with current participants
@@ -802,6 +1538,14 @@ const LandingPage: React.FC = () => {
     // Track participant events
     room.on('participantConnected', (participant) => {
       console.log('👋 Participant connected:', participant.identity);
+      console.log(`   Participant SID: ${participant.sid}`);
+      console.log(`   Participant tracks: ${participant.trackPublications.size}`);
+      
+      // Log existing tracks
+      participant.trackPublications.forEach((publication, sid) => {
+        console.log(`   📡 Track publication: ${sid} (${publication.kind})`);
+      });
+      
       updateParticipantsList();
     });
     
@@ -810,23 +1554,79 @@ const LandingPage: React.FC = () => {
       updateParticipantsList();
     });
     
+    // Add track publication events for debugging
+    room.on('trackPublished', (publication, participant) => {
+      console.log('📡 Track published:');
+      console.log(`   From: ${participant.identity}`);
+      console.log(`   Track SID: ${publication.trackSid}`);
+      console.log(`   Kind: ${publication.kind}`);
+      console.log(`   Source: ${publication.source}`);
+    });
+    
+    room.on('trackUnpublished', (publication, participant) => {
+      console.log('📡 Track unpublished:');
+      console.log(`   From: ${participant.identity}`);
+      console.log(`   Track SID: ${publication.trackSid}`);
+    });
+    
     // Initial participants update
     updateParticipantsList();
     
-    // Handle remote audio tracks
-    let remoteAudioEl: HTMLAudioElement | null = null;
-    room.on('trackSubscribed', (track) => {
-      if (track.kind === 'audio') {
-        // Detach previous audio if any
-        if (remoteAudioEl) {
-          try { remoteAudioEl.srcObject = null; } catch {}
-          remoteAudioEl.remove();
+    // Check for existing remote tracks when we join and ensure proper subscription
+    console.log('🔍 Checking for existing remote participants and tracks...');
+    room.remoteParticipants.forEach((participant) => {
+      console.log(`👤 Existing participant: ${participant.identity}`);
+      console.log(`   Track publications: ${participant.trackPublications.size}`);
+      
+      participant.trackPublications.forEach((publication) => {
+        console.log(`   📡 Existing track: ${publication.trackSid} (${publication.kind}, subscribed: ${publication.isSubscribed})`);
+        
+        // Force subscription to existing audio tracks
+        if (publication.kind === 'audio') {
+          if (publication.isSubscribed && publication.track) {
+            console.log('🔄 Manually handling existing subscribed audio track');
+            // Directly call our track subscription handler
+            handleTrackSubscription(publication.track, publication, participant);
+          } else if (!publication.isSubscribed) {
+            console.log('🔄 Subscribing to existing unsubscribed audio track');
+            // Force subscription to the track
+            publication.setSubscribed(true);
+          }
         }
-        const audioElement = track.attach();
-        audioElement.autoplay = true;
-        audioElement.play();
-        remoteAudioEl = audioElement;
-        document.body.appendChild(audioElement); // For quick testing; you can manage this in the UI if desired
+      });
+    });
+    
+    room.on('trackSubscribed', (track, publication, participant) => {
+      console.log('🎵 Track subscribed event fired:');
+      console.log(`   From: ${participant.identity}`);
+      console.log(`   Track kind: ${track.kind}`);
+      console.log(`   Track source: ${track.source}`);
+      console.log(`   Track SID: ${track.sid}`);
+      console.log(`   Publication SID: ${publication.trackSid}`);
+      
+      // Use the same handler for both existing and new track subscriptions
+      handleTrackSubscription(track, publication, participant);
+    });
+    
+    // Handle track unsubscription
+    room.on('trackUnsubscribed', (track, _publication, participant) => {
+      console.log('🔇 Track unsubscribed:');
+      console.log(`   From: ${participant.identity}`);
+      console.log(`   Track kind: ${track.kind}`);
+      console.log(`   Track source: ${track.source}`);
+      
+      if (track.kind === 'audio') {
+        const audioElement = remoteAudioElements.get(participant.identity);
+        if (audioElement) {
+          try {
+            track.detach(audioElement);
+            audioElement.remove();
+            remoteAudioElements.delete(participant.identity);
+            console.log('✅ Remote audio element cleaned up for:', participant.identity);
+          } catch (err) {
+            console.warn('⚠️ Error cleaning up audio element for', participant.identity, ':', err);
+          }
+        }
       }
     });
     // Clean up remote audio on disconnect
@@ -834,11 +1634,17 @@ const LandingPage: React.FC = () => {
       console.log('🔌 Room disconnected, clearing participants');
       setParticipants([]);
       setIsInvitingBot(false);
-      if (remoteAudioEl) {
-        try { remoteAudioEl.srcObject = null; } catch {}
-        remoteAudioEl.remove();
-        remoteAudioEl = null;
+      
+      // Clean up all remote audio elements
+      for (const [participantId, audioElement] of remoteAudioElements.entries()) {
+        try {
+          audioElement.remove();
+          console.log('🧹 Cleaned up audio element for:', participantId);
+        } catch (err) {
+          console.warn('⚠️ Error cleaning up audio element for', participantId, ':', err);
+        }
       }
+      remoteAudioElements.clear();
     });
     // Optionally: handle remote tracks, update UI, etc.
   };
@@ -855,6 +1661,25 @@ const LandingPage: React.FC = () => {
       return;
     }
 
+    // Validate phone numbers before inviting bot
+    if (!myNumber || !livekitCallPartner) {
+      console.error('❌ Invalid phone numbers for bot invitation:', { myNumber, livekitCallPartner });
+      setError('Cannot invite AI Oracle: Invalid phone numbers detected');
+      return;
+    }
+
+    // Clean and validate phone numbers
+    const cleanMyNumber = myNumber.replace(/\D/g, '');
+    const cleanPartnerNumber = livekitCallPartner.replace(/\D/g, '');
+    
+    if (!cleanMyNumber || !cleanPartnerNumber) {
+      console.error('❌ Phone numbers contain no digits:', { cleanMyNumber, cleanPartnerNumber });
+      setError('Cannot invite AI Oracle: Phone numbers must contain digits');
+      return;
+    }
+
+    console.log('🤖 Inviting bot with validated numbers:', { myNumber: cleanMyNumber, partner: cleanPartnerNumber });
+
     // Notify other participants that bot invitation is starting
     socketRef.current?.emit('bot-invitation-started', {
       roomParticipants: [myNumber, livekitCallPartner]
@@ -866,7 +1691,7 @@ const LandingPage: React.FC = () => {
       const botServerUrl = import.meta.env.VITE_BOT_SERVER_URL || 'http://localhost:4000';
       console.log('🤖 Using bot server URL:', botServerUrl);
       
-      const response = await fetch(`${botServerUrl}/join-room?number1=${encodeURIComponent(myNumber)}&number2=${encodeURIComponent(livekitCallPartner)}`);
+      const response = await fetch(`${botServerUrl}/join-room?number1=${encodeURIComponent(cleanMyNumber)}&number2=${encodeURIComponent(cleanPartnerNumber)}`);
       const result = await response.json();
       
       if (result.success) {
@@ -887,6 +1712,110 @@ const LandingPage: React.FC = () => {
       setIsInvitingBot(false);
     }
   };
+
+  // Comprehensive audio diagnostic function (available for debugging: call runAudioDiagnostics() in console)
+  const runAudioDiagnostics = async () => {
+    console.log('🔍 Running comprehensive audio diagnostics...');
+    
+    try {
+      // Check if getUserMedia is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error('❌ getUserMedia not supported in this browser');
+        return { success: false, error: 'getUserMedia not supported' };
+      }
+      
+      // Test microphone permissions
+      console.log('🎤 Testing microphone permissions...');
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      const audioTracks = stream.getAudioTracks();
+      console.log(`🎤 Available audio tracks: ${audioTracks.length}`);
+      
+      if (audioTracks.length === 0) {
+        stream.getTracks().forEach(track => track.stop());
+        return { success: false, error: 'No audio tracks available' };
+      }
+      
+      const track = audioTracks[0];
+      console.log('🎤 Primary audio track:', {
+        label: track.label,
+        enabled: track.enabled,
+        muted: track.muted,
+        readyState: track.readyState,
+        settings: track.getSettings(),
+        capabilities: track.getCapabilities()
+      });
+      
+      // Test audio context and analysis
+      console.log('🔊 Testing audio analysis...');
+      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      source.connect(analyser);
+      
+      analyser.fftSize = 256;
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      
+      // Test for 3 seconds
+      let maxLevel = 0;
+      let audioDetected = false;
+      
+      for (let i = 0; i < 30; i++) {
+        analyser.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((a, b) => a + b) / bufferLength;
+        const max = Math.max(...dataArray);
+        
+        if (average > maxLevel) maxLevel = average;
+        if (average > 1) audioDetected = true;
+        
+        if (i % 10 === 0) {
+          console.log(`🔊 Audio test ${i/10 + 1}/3: avg=${average.toFixed(2)}, max=${max}`);
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
+      // Clean up
+      audioContext.close();
+      stream.getTracks().forEach(track => track.stop());
+      
+      console.log(`🔊 Audio diagnostic results:`);
+      console.log(`   Audio detected: ${audioDetected}`);
+      console.log(`   Max level: ${maxLevel.toFixed(2)}`);
+      console.log(`   Track enabled: ${track.enabled}`);
+      console.log(`   Track muted: ${track.muted}`);
+      
+      if (!audioDetected) {
+        console.warn('⚠️ No audio input detected - microphone may be muted or disconnected');
+        return { 
+          success: false, 
+          error: 'No audio input detected',
+          details: {
+            trackEnabled: track.enabled,
+            trackMuted: track.muted,
+            maxLevel: maxLevel,
+            label: track.label
+          }
+        };
+      }
+      
+      console.log('✅ Audio diagnostics passed');
+      return { success: true, maxLevel: maxLevel };
+      
+    } catch (error) {
+      console.error('❌ Audio diagnostics failed:', error);
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
+    }
+  };
+
+  // Make diagnostics available globally for debugging
+  React.useEffect(() => {
+    (window as any).runAudioDiagnostics = runAudioDiagnostics;
+    return () => {
+      delete (window as any).runAudioDiagnostics;
+    };
+  }, []);
 
   const initiateCall = async (targetNumber: string) => {
     try {
@@ -973,7 +1902,31 @@ const LandingPage: React.FC = () => {
   };
 
   const toggleMute = () => {
-    if (webrtcRef.current) {
+    if (livekitCallState === 'connected' && liveKitRoomRef.current) {
+      // Handle LiveKit muting
+      const audioPublication = liveKitRoomRef.current.localParticipant.audioTrackPublications.values().next().value;
+      if (audioPublication && audioPublication.track) {
+        const newMutedState = !isMuted;
+        if (newMutedState) {
+          audioPublication.track.mute();
+        } else {
+          audioPublication.track.unmute();
+        }
+        setIsMuted(newMutedState);
+        console.log(`🔇 LiveKit audio ${newMutedState ? 'muted' : 'unmuted'}`);
+        
+        // Debug the track state
+        console.log('🎤 Local audio track state:', {
+          isMuted: audioPublication.track.isMuted,
+          trackSid: audioPublication.trackSid,
+          kind: audioPublication.track.kind,
+          source: audioPublication.track.source
+        });
+      } else {
+        console.warn('⚠️ No audio track found for LiveKit muting');
+      }
+    } else if (webrtcRef.current) {
+      // Handle WebRTC muting
       webrtcRef.current.toggleMute();
       setIsMuted(!isMuted);
     }
@@ -1173,91 +2126,89 @@ const LandingPage: React.FC = () => {
     console.log('📱 Updated current call partner to:', partner || '(empty)');
   };
 
+  const showToast = useToast();
+
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="max-w-md mx-auto">
-        <Header />
-        <div className="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
-          <CallInput
-            friendNumber={friendNumber}
-            onChange={handlePhoneNumberChange}
-            onKeyPress={handlePhoneNumberKeyPress}
-            onCall={handleCallFriend}
-            onCallLiveKit={handleCallViaLiveKit}
-          />
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-400"></div>
+    <ToastProvider>
+      <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="max-w-md mx-auto">
+          <Header />
+          <div className="bg-white rounded-2xl shadow-2xl p-8 border border-gray-100">
+            <CallInput
+              friendNumber={friendNumber}
+              onChange={handlePhoneNumberChange}
+              onKeyPress={handlePhoneNumberKeyPress}
+              onCall={handleCallFriend}
+              onCallLiveKit={handleCallViaLiveKit}
+            />
+            <div className="relative my-8">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-400"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-white text-gray-500"></span>
+              </div>
             </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-4 bg-white text-gray-500"></span>
+            <MyNumber
+              myNumber={myNumber}
+              onCopy={copyMyNumber}
+            />
+            <StatusIndicator isConnected={isConnected} />
+            <div className="mt-6">
+              <Instructions />
             </div>
           </div>
-          <MyNumber
-            myNumber={myNumber}
-            onCopy={copyMyNumber}
-          />
-          <StatusIndicator isConnected={isConnected} />
-          <div className="mt-6">
-            <Instructions />
-          </div>
+          <Footer />
+          {/* Call Interface Overlay - shows different content based on call state */}
+          {callState !== 'idle' && (
+            <CallInterface
+              callState={callState as CallInterfaceState}
+              error={error}
+              isMuted={isMuted}
+              callDuration={callDuration}
+              currentCallPartner={currentCallPartner}
+              isRinging={isRinging}
+              onMute={toggleMute}
+              onEndCall={endCall}
+              onAnswer={handleAnswerCall}
+              onDecline={handleDeclineCall}
+              onRetry={recoverFromError}
+                  showTranscription={showTranscription}
+                  onToggleTranscription={toggleTranscription}
+                  transcripts={transcripts}
+                  isTranscriptionLoading={isTranscriptionLoading}
+                  transcriptionError={transcriptionError}
+            />
+          )}
+          {livekitCallState !== 'idle' && (
+            <CallInterface
+              callState={livekitCallState as CallInterfaceState}
+              error={error}
+              isMuted={isMuted}
+              callDuration={callDuration}
+              currentCallPartner={livekitCallPartner}
+              isRinging={isRinging}
+              participants={participants}
+              onMute={toggleMute}
+              onEndCall={handleEndLiveKitCall}
+              onAnswer={handleAcceptLiveKitCall}
+              onDecline={handleDeclineLiveKitCall}
+              onRetry={recoverFromError}
+              onInviteBot={inviteBotToCall}
+              isInvitingBot={isInvitingBot}
+              showTranscription={showTranscription}
+              onToggleTranscription={toggleTranscription}
+              transcripts={transcripts}
+              isTranscriptionLoading={isTranscriptionLoading}
+              transcriptionError={transcriptionError}
+            />
+          )}
+          {/* Audio Elements */}
+          <audio ref={localAudioRef} muted />
+          <audio ref={remoteAudioRef} autoPlay />
         </div>
-        <Footer />
-        {/* Call Interface Overlay - shows different content based on call state */}
-        {callState !== 'idle' && (
-          <CallInterface
-            callState={callState as CallInterfaceState}
-            error={error}
-            isMuted={isMuted}
-            callDuration={callDuration}
-            currentCallPartner={currentCallPartner}
-            isRinging={isRinging}
-            onMute={toggleMute}
-            onEndCall={endCall}
-            onAnswer={handleAnswerCall}
-            onDecline={handleDeclineCall}            onRetry={recoverFromError}
-                showTranscription={showTranscription}
-                onToggleTranscription={toggleTranscription}
-                transcripts={transcripts}
-                isTranscriptionLoading={isTranscriptionLoading}
-                transcriptionError={transcriptionError}
-                showOracle={showOracle}
-                onToggleOracle={toggleOracle}
-                roomId={getRoomName(myNumber, currentCallPartner)}
-                participantName={myNumber}
-          />
-        )}        {livekitCallState !== 'idle' && (
-          <CallInterface
-            callState={livekitCallState as CallInterfaceState}
-            error={error}
-            isMuted={isMuted}
-            callDuration={callDuration}
-            currentCallPartner={livekitCallPartner}
-            isRinging={isRinging}
-            participants={participants}
-            onMute={toggleMute}
-            onEndCall={handleEndLiveKitCall}
-            onAnswer={handleAcceptLiveKitCall}
-            onDecline={handleDeclineLiveKitCall}
-            onRetry={recoverFromError}
-            onInviteBot={inviteBotToCall}
-            isInvitingBot={isInvitingBot}
-            showTranscription={showTranscription}
-            onToggleTranscription={toggleTranscription}
-            transcripts={transcripts}
-            isTranscriptionLoading={isTranscriptionLoading}
-            transcriptionError={transcriptionError}
-            showOracle={showOracle}
-            onToggleOracle={toggleOracle}
-            roomId={getRoomName(myNumber, livekitCallPartner)}
-            participantName={myNumber}
-          />
-        )}
-        {/* Audio Elements */}
-        <audio ref={localAudioRef} muted />
-        <audio ref={remoteAudioRef} autoPlay />
       </div>
-    </div>
+    </ToastProvider>
   );
 };
 

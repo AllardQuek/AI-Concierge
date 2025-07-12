@@ -31,6 +31,7 @@ const server = http.createServer(app);
 // Configure CORS for both Express and Socket.IO
 const allowedOrigins = process.env.NODE_ENV === 'production' 
   ? [
+      'https://ai-concierge-sybil.vercel.app',
       'https://ai-concierge-mulisa.vercel.app',
       'https://ai-concierge-tgjt.vercel.app',
       'https://ai-concierge-tgjt-allardqueks-projects.vercel.app',
@@ -198,11 +199,19 @@ io.on('connection', (socket) => {
       // Check if this code is already registered
       const existingSocketId = peerCodeMap.get(userCode);
       if (existingSocketId && existingSocketId !== socket.id) {
-        console.log(`⚠️  Code "${userCode}" was previously registered to socket ${existingSocketId}, overriding with ${socket.id}`);
+        console.log(`🔄 Code "${userCode}" was previously registered to socket ${existingSocketId}, updating to ${socket.id} (reconnection)`);
+        
+        // Clean up the old socket if it still exists in users map
+        const oldUser = users.get(existingSocketId);
+        if (oldUser) {
+          console.log(`🧹 Cleaning up old socket ${existingSocketId} for user "${userCode}"`);
+          users.delete(existingSocketId);
+        }
       }
       
-      // Map the user code to socket ID
+      // Map the user code to socket ID (updates existing or creates new)
       peerCodeMap.set(userCode, socket.id);
+      console.log(`📱 Updated peer code map: "${userCode}" -> socket ${socket.id}`);
       
       // Store user info
       users.set(socket.id, {
@@ -394,17 +403,43 @@ io.on('connection', (socket) => {
 
   // Caller initiates a LiveKit call to callee
   socket.on('call-user-livekit', ({ targetCode, callerCode }) => {
+    console.log(`📞 LiveKit call initiated: callerCode="${callerCode}", targetCode="${targetCode}"`);
+    
+    // Validate callerCode before forwarding
+    if (!callerCode || callerCode.trim() === '') {
+      console.error(`❌ Invalid callerCode for LiveKit call: "${callerCode}"`);
+      socket.emit('error', { message: 'Invalid caller code for LiveKit call' });
+      return;
+    }
+    
     const targetSocketId = peerCodeMap.get(targetCode);
     if (targetSocketId) {
+      console.log(`📡 Forwarding LiveKit call to ${targetCode} (socket: ${targetSocketId})`);
       io.to(targetSocketId).emit('user-calling-livekit', { callerCode });
+    } else {
+      console.log(`❌ Target user ${targetCode} not found for LiveKit call`);
+      socket.emit('error', { message: `User ${targetCode} is not available` });
     }
   });
 
   // Callee accepts the LiveKit call
   socket.on('accept-call-livekit', ({ callerCode, calleeCode }) => {
+    console.log(`📞 LiveKit call accepted: calleeCode="${calleeCode}", callerCode="${callerCode}"`);
+    console.log(`📱 Callee socket: ${socket.id}`);
+    
     const callerSocketId = peerCodeMap.get(callerCode);
+    console.log(`🔍 Caller socket lookup result: ${callerSocketId ? `FOUND (${callerSocketId})` : 'NOT FOUND'}`);
+    
     if (callerSocketId) {
+      console.log(`📡 Sending call-accepted-livekit to caller socket ${callerSocketId}`);
       io.to(callerSocketId).emit('call-accepted-livekit', { calleeCode });
+      console.log(`✅ Call acceptance notification sent to ${callerCode}`);
+    } else {
+      console.log(`❌ Caller ${callerCode} not found when accepting call`);
+      console.log(`📊 Available users: [${Array.from(peerCodeMap.keys()).join(', ')}]`);
+      
+      // Send error to callee since caller is not available
+      socket.emit('error', { message: `Caller ${callerCode} is no longer available` });
     }
   });
 
@@ -456,11 +491,12 @@ io.on('connection', (socket) => {
       
       // Handle peer-to-peer disconnection cleanup
       if (user.type === 'peer' && user.code) {
-        console.log(`🧹 Cleaning up peer "${user.code}" (socket: ${socket.id})`);
+        console.log(`🧹 Handling disconnect for peer "${user.code}" (socket: ${socket.id})`);
         
-        // Remove from peer code map
-        peerCodeMap.delete(user.code);
-        console.log(`🗑️  Removed "${user.code}" from peer code map`);
+        // DON'T remove from peer code map on disconnect - keep users registered
+        // This allows them to remain available for calls even after temporary disconnections
+        // The peerCodeMap will be updated when they reconnect with their new socket ID
+        console.log(`📱 Keeping "${user.code}" registered in peer code map for reconnection`);
         
         // Clean up any active P2P calls involving this user
         let cleanedCalls = 0;
@@ -497,12 +533,21 @@ io.on('connection', (socket) => {
     console.log(`🔌 === END USER DISCONNECT DEBUG ===\n`);
   });
 
-  // Handle manual leave room (legacy - can be removed if not needed)
+  // Handle manual leave room (explicit user action to unregister)
   socket.on('leave-room', () => {
     const user = users.get(socket.id);
     if (user && user.type === 'peer') {
+      console.log(`🚪 User ${socket.id} manually leaving room, code: "${user.code}"`);
+      
+      // Remove from peer code map if this socket owns the code
+      if (peerCodeMap.get(user.code) === socket.id) {
+        peerCodeMap.delete(user.code);
+        console.log(`🗑️  Removed "${user.code}" from peer code map (explicit leave)`);
+      }
+      
       users.delete(socket.id);
       socket.emit('left-room');
+      console.log(`✅ User ${socket.id} successfully left room`);
     }
   });
 
