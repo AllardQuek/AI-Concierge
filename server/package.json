@@ -5,13 +5,18 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "bot": "node bot-client.js",
+    "bot:dev": "nodemon bot-client.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "socket.io": "^4.7.5",
     "cors": "^2.8.5",
-    "uuid": "^9.0.1"
+    "express": "^4.18.2",
+    "simple-peer": "^9.11.1",
+    "socket.io": "^4.7.5",
+    "socket.io-client": "^4.7.5",
+    "uuid": "^9.0.1",
+    "wrtc": "^0.4.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"

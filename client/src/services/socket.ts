@@ -36,7 +36,7 @@ export class SocketService {
     // Use environment variable or fallback to localhost
     this.serverUrl = serverUrl || 
       (import.meta as any).env?.VITE_SERVER_URL || 
-      'http://localhost:3001';
+      'http://localhost:3001'; //TODO: Change variable name here, this is not VITE Server URL this is the backend server URL
     
     // Debug logging to see what URL is being used
     console.log('SocketService: Connecting to server URL:', this.serverUrl);

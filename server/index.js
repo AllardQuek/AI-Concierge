@@ -3,9 +3,40 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
+const BotClient = require('./bot-client');
 
 const app = express();
 const server = http.createServer(app);
+
+// Bot configuration
+const BOT_CONFIG = {
+  serverUrl: process.env.BOT_SERVER_URL || 'http://localhost:3001',
+  phoneNumber: process.env.BOT_PHONE_NUMBER || '+65 8000 0000',
+  botName: process.env.BOT_NAME || 'AI Assistant',
+  voice: process.env.BOT_VOICE || 'en-US-Neural2-F',
+  language: process.env.BOT_LANGUAGE || 'en-US',
+  wakeword: process.env.BOT_WAKEWORD || 'hey sybil',
+  responses: {
+    precall: "Hello! I'm your AI assistant. I'm here to help facilitate this conversation.",
+    greeting: "Hi there! I'm joining this call to assist you both.",
+    farewell: "Thank you for the conversation. I'm here if you need anything else!"
+  }
+};
+
+// Bot instance
+let botClient = null;
+
+// Initialize bot
+async function initializeBot() {
+  try {
+    console.log('🤖 Initializing AI Assistant bot...');
+    botClient = new BotClient(BOT_CONFIG);
+    await botClient.start();
+    console.log('✅ Bot initialized and ready to join calls');
+  } catch (error) {
+    console.error('❌ Failed to initialize bot:', error);
+  }
+}
 
 // Configure CORS for both Express and Socket.IO
 const allowedOrigins = process.env.NODE_ENV === 'production' 
@@ -15,7 +46,7 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
       'https://ai-concierge-tgjt-allardqueks-projects.vercel.app',
       ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [])
     ]
-  : ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"];
+  : ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"]; //hardcode local ip address for development; pick this up from env in future
 
 app.use(cors({
   origin: allowedOrigins,
@@ -38,8 +69,21 @@ const io = socketIo(server, {
 
 // Store peer-to-peer connections globally
 const peerCodeMap = new Map(); // Map<userCode, socketId>
-const activeP2PCalls = new Map(); // Map<callerCode, { targetCode, callId }>
+const activeP2PCalls = new Map(); // Map<callerCode, { targetCode, callId, botIncluded }>
 const users = new Map(); // For peer connections tracking
+const botSocketId = 'bot-' + uuidv4(); // Virtual socket ID for bot
+
+// Register bot in peer code map
+peerCodeMap.set(BOT_CONFIG.phoneNumber, botSocketId);
+users.set(botSocketId, {
+  id: botSocketId,
+  username: BOT_CONFIG.phoneNumber,
+  code: BOT_CONFIG.phoneNumber,
+  type: 'bot',
+  joinTime: new Date()
+});
+
+console.log(`🤖 Bot registered with code: ${BOT_CONFIG.phoneNumber}`);
 
 app.use(express.json());
 
@@ -159,22 +203,81 @@ io.on('connection', (socket) => {
       console.log(`📋 Offer provided: ${offer ? 'YES' : 'NO'}`);
       console.log(`📊 Currently registered users: [${Array.from(peerCodeMap.keys()).join(', ')}]`);
       
+      // Check if this is a direct call to the bot
+      if (targetCode === BOT_CONFIG.phoneNumber) {
+        console.log(`🤖 Direct call to bot detected from ${callerCode}`);
+        
+        // Handle as a direct bot call - no injection needed
+        if (botClient && botClient.webrtcService) {
+          console.log(`🤖 Bot answering direct call from ${callerCode}`);
+          
+          // Simulate the bot receiving the call directly
+          const botCallData = {
+            callerCode: callerCode,
+            offer: offer,
+            isDirectCall: true // Mark as direct call
+          };
+          
+          // Have the bot handle the incoming call
+          botClient.handleIncomingCall(botCallData);
+          
+          console.log(`✅ Bot handling direct call from ${callerCode}`);
+        } else {
+          console.log(`⚠️ Bot not available for direct call`);
+          socket.emit('call-declined');
+        }
+        
+        console.log(`📞 === END DIRECT BOT CALL DEBUG ===\n`);
+        return;
+      }
+      
       const targetSocketId = peerCodeMap.get(targetCode);
       console.log(`🔍 Target socket lookup result: ${targetSocketId ? `FOUND (${targetSocketId})` : 'NOT FOUND'}`);
       
       if (targetSocketId) {
         // Store the active call
         const callId = uuidv4();
-        activeP2PCalls.set(callerCode, { targetCode, callId, callerSocketId: socket.id });
+        activeP2PCalls.set(callerCode, { 
+          targetCode, 
+          callId, 
+          callerSocketId: socket.id,
+          botIncluded: true // Mark that bot is included
+        });
         
         console.log(`💾 Stored active call: ${callerCode} -> ${targetCode} (callId: ${callId})`);
-        console.log(`📡 Emitting 'user-calling' to socket ${targetSocketId}...`);
+        console.log(`🤖 Bot will be automatically included in this call`);
         
         // Notify the target user about incoming call with offer
         io.to(targetSocketId).emit('user-calling', { 
           callerCode, 
           offer: offer // Forward the WebRTC offer
         });
+        
+        // Automatically inject bot into the call
+        setTimeout(async () => {
+          try {
+            if (botClient && botClient.webrtcService) {
+              console.log(`🤖 Bot joining call between ${callerCode} and ${targetCode}`);
+              
+              // Bot should join the existing call, not create a new one
+              // We'll simulate the bot receiving the same offer that was sent to the target
+              const botCallData = {
+                callerCode: callerCode,
+                offer: offer, // Use the same offer that was sent to the target
+                isDirectCall: false // Mark as injected call
+              };
+              
+              // Have the bot handle the incoming call automatically
+              await botClient.handleIncomingCall(botCallData);
+              
+              console.log(`✅ Bot successfully joined existing call transparently`);
+            } else {
+              console.log(`⚠️ Bot not available for call injection`);
+            }
+          } catch (error) {
+            console.error('❌ Error injecting bot into call:', error);
+          }
+        }, 1000); // Small delay to ensure initial call setup is complete
         
         console.log(`✅ Successfully notified ${targetCode} about incoming call from ${callerCode}`);
         console.log(`📋 Active calls: ${Array.from(activeP2PCalls.keys()).join(', ')}`);
@@ -269,6 +372,26 @@ io.on('connection', (socket) => {
         console.log(`✅ Call end notification sent to ${targetCode}`);
       }
       
+      // Notify the bot that the call ended (if bot is available)
+      if (botClient && botClient.webrtcService) {
+        console.log(`🤖 Notifying bot that call ended between ${callerCode} and ${targetCode}`);
+        
+        // Clean up bot's connections to both parties
+        botClient.webrtcService.cleanup(callerCode);
+        botClient.webrtcService.cleanup(targetCode);
+        
+        // Reset bot's current call state
+        if (botClient.currentCall && 
+            (botClient.currentCall.callerCode === callerCode || 
+             botClient.currentCall.callerCode === targetCode)) {
+          console.log(`🤖 Bot cleaning up call state`);
+          botClient.currentCall = null;
+          botClient.stopRecording();
+        }
+        
+        console.log(`✅ Bot connections cleaned up for ended call`);
+      }
+      
       // Clean up the call record
       activeP2PCalls.delete(callerCode);
       activeP2PCalls.delete(targetCode); // Clean up both directions
@@ -315,6 +438,63 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Handle bot-specific events
+  socket.on('bot-answer-call', ({ callerCode, answer }) => {
+    try {
+      const timestamp = new Date().toISOString();
+      console.log(`\n🤖 === BOT ANSWER DEBUG === ${timestamp}`);
+      console.log(`🤖 Bot answering call from "${callerCode}"`);
+      
+      const callerSocketId = peerCodeMap.get(callerCode);
+      if (callerSocketId) {
+        console.log(`📡 Bot sending answer to ${callerCode}`);
+        io.to(callerSocketId).emit('call-answered', { answer });
+        console.log(`✅ Bot answer sent successfully`);
+      }
+      
+      console.log(`🤖 === END BOT ANSWER DEBUG ===\n`);
+      
+    } catch (error) {
+      console.error('❌ Error handling bot answer:', error);
+    }
+  });
+
+  socket.on('bot-ice-candidate', ({ candidate, targetUserId }) => {
+    try {
+      const timestamp = new Date().toISOString();
+      console.log(`\n🤖 === BOT ICE CANDIDATE DEBUG === ${timestamp}`);
+      console.log(`🤖 Bot ICE candidate TO: "${targetUserId}"`);
+      
+      const targetSocketId = peerCodeMap.get(targetUserId);
+      if (targetSocketId) {
+        console.log(`📡 Bot forwarding ICE candidate to ${targetUserId}`);
+        io.to(targetSocketId).emit('ice-candidate', { candidate });
+        console.log(`✅ Bot ICE candidate forwarded successfully`);
+      }
+      
+      console.log(`🤖 === END BOT ICE CANDIDATE DEBUG ===\n`);
+      
+    } catch (error) {
+      console.error('❌ Error handling bot ICE candidate:', error);
+    }
+  });
+
+  // Handle bot call end notification
+  socket.on('bot-call-ended', ({ callerCode, targetCode }) => {
+    try {
+      const timestamp = new Date().toISOString();
+      console.log(`\n🤖 === BOT CALL END DEBUG === ${timestamp}`);
+      console.log(`🤖 Bot call ended between "${callerCode}" and "${targetCode}"`);
+      
+      // Bot has already cleaned up its connections, just log the event
+      console.log(`✅ Bot call cleanup completed`);
+      console.log(`🤖 === END BOT CALL END DEBUG ===\n`);
+      
+    } catch (error) {
+      console.error('❌ Error handling bot call end:', error);
+    }
+  });
+
   // Handle user disconnect
   socket.on('disconnect', () => {
     const timestamp = new Date().toISOString();
@@ -350,6 +530,22 @@ io.on('connection', (socket) => {
               io.to(otherSocketId).emit('call-ended', { fromCode: user.code });
             }
             
+            // Clean up bot connections for this call
+            if (botClient && botClient.webrtcService) {
+              console.log(`🤖 Cleaning up bot connections for disconnected user ${user.code}`);
+              botClient.webrtcService.cleanup(callerCode);
+              botClient.webrtcService.cleanup(call.targetCode);
+              
+              // Reset bot's current call state if it was involved
+              if (botClient.currentCall && 
+                  (botClient.currentCall.callerCode === callerCode || 
+                   botClient.currentCall.callerCode === call.targetCode)) {
+                console.log(`🤖 Bot cleaning up call state due to user disconnect`);
+                botClient.currentCall = null;
+                botClient.stopRecording();
+              }
+            }
+            
             activeP2PCalls.delete(callerCode);
             cleanedCalls++;
           }
@@ -381,11 +577,14 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3001;
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Voice Chat Server running on port ${PORT}`);
   console.log(`📡 WebSocket server ready for connections`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 CORS origins: ${allowedOrigins.join(', ')}`);
+  
+  // Initialize the bot after server is ready
+  await initializeBot();
 });
 
 // Graceful shutdown

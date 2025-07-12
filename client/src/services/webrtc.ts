@@ -197,7 +197,7 @@ export class WebRTCService {
     try {
       // Use mobile-optimized constraints
       const audioConstraints = this.getMobileAudioConstraints();
-      
+
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: audioConstraints,
         video: false,
