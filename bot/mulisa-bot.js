@@ -980,6 +980,10 @@ app.listen(PORT, () => {
   });
 });
 
+// Environment-aware process handling
+const isProduction = process.env.NODE_ENV === 'production';
+const isRailway = process.env.RAILWAY_ENVIRONMENT_NAME === 'production';
+
 // Process monitoring to ensure bot stays alive
 process.on('exit', (code) => {
   console.log(`[BOT] Process exiting with code: ${code}`);
@@ -989,39 +993,58 @@ process.on('exit', (code) => {
   console.log('[BOT] 🔄 Agent process should restart automatically');
 });
 
-// MODIFIED: Don't exit on SIGTERM - just cleanup and stay alive
+// Environment-aware SIGTERM handling
 process.on('SIGTERM', () => {
-  console.log('[BOT] 📡 Received SIGTERM, performing cleanup but staying alive...');
+  console.log('[BOT] 📡 Received SIGTERM, performing cleanup...');
   console.log('[BOT] 🧹 Cleaning up active rooms...');
   activeRooms.clear();
   oracleListeningState.clear();
-  console.log('[BOT] ✅ Cleanup completed - staying alive');
-  // REMOVED: process.exit(0);
+  
+  if (isProduction || isRailway) {
+    console.log('[BOT] ✅ Cleanup completed - staying alive (production mode)');
+    // Don't exit in production/Railway
+  } else {
+    console.log('[BOT] ✅ Cleanup completed - exiting (development mode)');
+    process.exit(0); // Exit normally in development
+  }
 });
 
-// MODIFIED: Don't exit on SIGINT - just cleanup and stay alive  
+// Environment-aware SIGINT handling  
 process.on('SIGINT', () => {
-  console.log('[BOT] 📡 Received SIGINT, performing cleanup but staying alive...');
+  console.log('[BOT] 📡 Received SIGINT, performing cleanup...');
   console.log('[BOT] 🧹 Cleaning up active rooms...');
   activeRooms.clear();
   oracleListeningState.clear();
-  console.log('[BOT] ✅ Cleanup completed - staying alive');
-  // REMOVED: process.exit(0);
+  
+  if (isProduction || isRailway) {
+    console.log('[BOT] ✅ Cleanup completed - staying alive (production mode)');
+    // Don't exit in production/Railway
+  } else {
+    console.log('[BOT] ✅ Cleanup completed - exiting (development mode)');
+    process.exit(0); // Exit normally in development
+  }
 });
 
-// ADDED: Prevent exit when LiveKit Agents tries to exit
+// Environment-aware exit prevention
 process.on('beforeExit', (code) => {
-  console.log(`[BOT] 🛡️ Preventing exit with code: ${code}`);
+  console.log(`[BOT] 🛡️ Exit requested with code: ${code}`);
+  console.log(`[BOT] 🛡️ Environment: ${isProduction ? 'production' : 'development'}`);
   console.log(`[BOT] 🛡️ Active rooms: ${activeRooms.size}, CLI running: ${cliRunning}`);
   
-  // Only allow exit if we're shutting down intentionally
+  // In development, allow normal exits
+  if (!isProduction && !isRailway) {
+    console.log('[BOT] ✅ Allowing exit (development mode)');
+    return; // Allow exit in development
+  }
+  
+  // In production, only allow exit if no active rooms
   if (code === 0 && activeRooms.size === 0) {
     console.log('[BOT] ✅ Allowing graceful exit - no active rooms');
     return; // Allow exit
   }
   
-  console.log('[BOT] 🛡️ Blocking exit - keeping process alive');
-  return false; // Prevent exit
+  console.log('[BOT] 🛡️ Blocking exit - keeping process alive (production mode)');
+  return false; // Prevent exit in production
 });
 
 // Handle uncaught exceptions to prevent crashes
