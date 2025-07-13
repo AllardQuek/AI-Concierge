@@ -1007,7 +1007,7 @@ let cliRunning = false;
 
 // Keep the process alive with a heartbeat
 setInterval(() => {
-  console.log(`[BOT] 💓 Heartbeat - Uptime: ${process.uptime().toFixed(1)}s, Active rooms: ${activeRooms.size}, CLI running: ${cliRunning}`);
+  console.log(`[BOT] 💓 Heartbeat - PID: ${process.pid}, Uptime: ${process.uptime().toFixed(1)}s, Active rooms: ${activeRooms.size}, CLI running: ${cliRunning}`);
 }, 300000); // Log every 5 minutes
 
 console.log('[BOT] 🛡️ Process monitoring enabled - bot will stay alive');
