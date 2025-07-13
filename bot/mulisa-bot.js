@@ -532,23 +532,6 @@ export default defineAgent({
         hasParticipants: !!ctx.room.participants,
         participantsType: ctx.room.participants ? typeof ctx.room.participants : 'undefined'
       });
-      
-      // Wait for bot's audio track to be published (with timeout)
-      // if (agentPublication) {
-      //   console.log('[ORACLE] 🎤 Waiting for bot audio track to be published...');
-      //   try {
-      //     await Promise.race([
-      //       agentPublication.waitForSubscription(),
-      //       new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
-      //     ]);
-      //     console.log('[ORACLE] ✅ Bot audio track published successfully');
-      //   } catch (error) {
-      //     console.warn(`[ORACLE] ⚠️ Audio track publication timeout: ${error.message}`);
-      //     console.warn(`[ORACLE] ⚠️ Proceeding with speech synthesis anyway...`);
-      //   }
-      // } else {
-      //   console.log('[ORACLE] ⚠️ Agent publication not available, proceeding without waiting...');
-      // }
 
       // Wait for participants to be ready to receive audio (fixes callee audio issue)
       console.log('[ORACLE] ⏳ Waiting for participants to be ready for audio...');
@@ -560,7 +543,6 @@ export default defineAgent({
       console.log(`[AZURE TTS] Starting synthesis ${requestId} for text: "${greetingText}"`);
       console.log('[ORACLE] 🎵 Starting speech synthesis...');
       console.log('[ORACLE] 🎵 Agent state before speech:', agent.state);
-      // console.log('[ORACLE] 🎵 Audio publication status:', agentPublication ? 'available' : 'not available');
           
       // Oracle greeting
       try {
@@ -931,6 +913,42 @@ app.post('/cleanup', (req, res) => {
   });
 });
 
+// Manual CLI restart endpoint for recovery
+app.post('/restart-cli', async (req, res) => {
+  console.log('[BOT] 🔄 Manual CLI restart requested');
+  
+  if (cliRunning) {
+    console.log('[BOT] ⚠️ CLI is already running');
+    return res.json({ 
+      success: false, 
+      message: 'CLI is already running',
+      cliRunning: true
+    });
+  }
+  
+  try {
+    console.log('[BOT] 🔄 Restarting LiveKit Agents CLI...');
+    await cli.runApp(new WorkerOptions({ 
+      agent: fileURLToPath(import.meta.url),
+      agent_name: 'mulisa-oracle-agent'
+    }));
+    cliRunning = true;
+    console.log('[BOT] ✅ LiveKit Agents CLI restarted successfully');
+    
+    res.json({ 
+      success: true, 
+      message: 'CLI restart initiated',
+      cliRunning: cliRunning
+    });
+  } catch (error) {
+    console.error('[BOT] ❌ Failed to restart CLI:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Start the HTTP server first
 app.listen(PORT, () => {
   console.log(`[BOT] 🌐 HTTP server running on port ${PORT}`);
@@ -971,22 +989,39 @@ process.on('exit', (code) => {
   console.log('[BOT] 🔄 Agent process should restart automatically');
 });
 
+// MODIFIED: Don't exit on SIGTERM - just cleanup and stay alive
 process.on('SIGTERM', () => {
-  console.log('[BOT] 📡 Received SIGTERM, performing graceful shutdown...');
+  console.log('[BOT] 📡 Received SIGTERM, performing cleanup but staying alive...');
   console.log('[BOT] 🧹 Cleaning up active rooms...');
   activeRooms.clear();
   oracleListeningState.clear();
-  console.log('[BOT] ✅ Graceful shutdown completed');
-  process.exit(0);
+  console.log('[BOT] ✅ Cleanup completed - staying alive');
+  // REMOVED: process.exit(0);
 });
 
+// MODIFIED: Don't exit on SIGINT - just cleanup and stay alive  
 process.on('SIGINT', () => {
-  console.log('[BOT] 📡 Received SIGINT, performing graceful shutdown...');
+  console.log('[BOT] 📡 Received SIGINT, performing cleanup but staying alive...');
   console.log('[BOT] 🧹 Cleaning up active rooms...');
   activeRooms.clear();
   oracleListeningState.clear();
-  console.log('[BOT] ✅ Graceful shutdown completed');
-  process.exit(0);
+  console.log('[BOT] ✅ Cleanup completed - staying alive');
+  // REMOVED: process.exit(0);
+});
+
+// ADDED: Prevent exit when LiveKit Agents tries to exit
+process.on('beforeExit', (code) => {
+  console.log(`[BOT] 🛡️ Preventing exit with code: ${code}`);
+  console.log(`[BOT] 🛡️ Active rooms: ${activeRooms.size}, CLI running: ${cliRunning}`);
+  
+  // Only allow exit if we're shutting down intentionally
+  if (code === 0 && activeRooms.size === 0) {
+    console.log('[BOT] ✅ Allowing graceful exit - no active rooms');
+    return; // Allow exit
+  }
+  
+  console.log('[BOT] 🛡️ Blocking exit - keeping process alive');
+  return false; // Prevent exit
 });
 
 // Handle uncaught exceptions to prevent crashes
@@ -1007,7 +1042,21 @@ let cliRunning = false;
 
 // Keep the process alive with a heartbeat
 setInterval(() => {
-  console.log(`[BOT] 💓 Heartbeat - PID: ${process.pid}, Uptime: ${process.uptime().toFixed(1)}s, Active rooms: ${activeRooms.size}, CLI running: ${cliRunning}`);
+  const status = {
+    pid: process.pid,
+    uptime: process.uptime().toFixed(1),
+    activeRooms: activeRooms.size,
+    cliRunning: cliRunning,
+    memoryUsage: process.memoryUsage(),
+    timestamp: new Date().toISOString()
+  };
+  
+  console.log(`[BOT] 💓 Heartbeat:`, status);
+  
+  // Alert if CLI is not running for too long
+  if (!cliRunning && process.uptime() > 60) {
+    console.log(`[BOT] ⚠️ WARNING: CLI not running for ${process.uptime().toFixed(1)}s - bot cannot join rooms`);
+  }
 }, 300000); // Log every 5 minutes
 
 console.log('[BOT] 🛡️ Process monitoring enabled - bot will stay alive');
