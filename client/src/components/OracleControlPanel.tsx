@@ -72,7 +72,11 @@ const OracleControlPanel: React.FC<OracleControlPanelProps> = ({
     setError(null);
     
     try {
-      await oracleService.dismissOracle(roomId);
+      // Extract numbers from roomId (format: "room-number1-number2")
+      const numbers = roomId.replace('room-', '').split('-');
+      const [number1, number2] = numbers.length >= 2 ? numbers : [roomId, participantName];
+      
+      await oracleService.dismissOracle(number1, number2);
       setIsOracleActive(false);
       setCurrentWisdom(null);
       oracleService.stopWisdomPolling();
@@ -102,7 +106,8 @@ const OracleControlPanel: React.FC<OracleControlPanelProps> = ({
     }
   };
 
-  const getConfidenceColor = (confidence: number): string => {
+  const getConfidenceColor = (confidence: number | undefined): string => {
+    if (!confidence) return 'text-gray-600';
     if (confidence >= 0.8) return 'text-green-600';
     if (confidence >= 0.6) return 'text-yellow-600';
     return 'text-red-600';
@@ -206,10 +211,10 @@ const OracleControlPanel: React.FC<OracleControlPanelProps> = ({
                   </span>
                   <div className="flex items-center gap-2 text-xs">
                     <span className={`font-medium ${getConfidenceColor(currentWisdom.confidence)}`}>
-                      {Math.round(currentWisdom.confidence * 100)}% confidence
+                      {Math.round((currentWisdom.confidence || 0) * 100)}% confidence
                     </span>
                     <span className="text-purple-400">
-                      {formatTimestamp(currentWisdom.timestamp)}
+                      {formatTimestamp(currentWisdom.timestamp.toString())}
                     </span>
                   </div>
                 </div>
@@ -240,7 +245,7 @@ const OracleControlPanel: React.FC<OracleControlPanelProps> = ({
                     <span>{getWisdomTypeIcon(wisdom.type)}</span>
                     <span className="text-purple-300 capitalize">{wisdom.type}</span>
                     <span className="text-purple-400 ml-auto">
-                      {formatTimestamp(wisdom.timestamp)}
+                      {formatTimestamp(wisdom.timestamp.toString())}
                     </span>
                   </div>
                   <p className="text-purple-100 leading-relaxed">
