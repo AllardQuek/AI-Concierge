@@ -470,6 +470,9 @@ export default defineAgent({
     console.log('[ORACLE] ✅ Oracle warmed up and ready');
   },
   
+  // Keep the agent process alive between room connections
+  keepAlive: true,
+  
   entry: async (ctx) => {
     let roomName;
     try {
@@ -547,9 +550,14 @@ export default defineAgent({
       //   console.log('[ORACLE] ⚠️ Agent publication not available, proceeding without waiting...');
       // }
 
+      // Wait for participants to be ready to receive audio (fixes callee audio issue)
+      console.log('[ORACLE] ⏳ Waiting for participants to be ready for audio...');
+      await new Promise(resolve => setTimeout(resolve, 3000)); // Wait 3 seconds
+      console.log('[ORACLE] ✅ Participants should now be ready for audio');
+
       const requestId = crypto.randomUUID();
       const greetingText = 'Hello! The Oracle Mulisa has joined your call.';
-      console.log(`[AZURE TTS] �� Starting synthesis ${requestId} for text: "${greetingText}"`);
+      console.log(`[AZURE TTS] Starting synthesis ${requestId} for text: "${greetingText}"`);
       console.log('[ORACLE] 🎵 Starting speech synthesis...');
       console.log('[ORACLE] 🎵 Agent state before speech:', agent.state);
       // console.log('[ORACLE] 🎵 Audio publication status:', agentPublication ? 'available' : 'not available');
@@ -578,12 +586,13 @@ export default defineAgent({
       console.log(`[ORACLE] 🔮 Oracle Mulisa is now active in room: ${roomName}`);
       console.log(`[ORACLE] 🎤 Oracle listening is disabled by default - use toggle to enable`);
       
-      // Clean up when room disconnects
+      // Clean up when room disconnects (but don't shut down the agent process)
       ctx.room.on('disconnected', () => {
         console.log(`[ORACLE] 🔌 Oracle disconnecting from room: ${roomName}`);
         activeRooms.delete(roomName);
         oracleListeningState.delete(roomName);
         console.log(`[ORACLE] 🧹 Cleaned up state for room: ${roomName}`);
+        console.log(`[ORACLE] 🔄 Agent process staying alive for future calls`);
         logBotState(); // Log state after cleanup
       });
       
@@ -913,3 +922,50 @@ app.listen(PORT, () => {
   console.log(`[BOT] 🚀 Starting LiveKit Agents CLI...`);
   cli.runApp(new WorkerOptions({ agent: fileURLToPath(import.meta.url) }));
 });
+
+// Process monitoring to ensure bot stays alive
+process.on('exit', (code) => {
+  console.log(`[BOT] Process exiting with code: ${code}`);
+  if (code !== 0) {
+    console.log('[BOT] ⚠️ Unexpected exit detected');
+  }
+  console.log('[BOT] 🔄 Agent process should restart automatically');
+});
+
+process.on('SIGTERM', () => {
+  console.log('[BOT] 📡 Received SIGTERM, performing graceful shutdown...');
+  console.log('[BOT] 🧹 Cleaning up active rooms...');
+  activeRooms.clear();
+  oracleListeningState.clear();
+  console.log('[BOT] ✅ Graceful shutdown completed');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('[BOT] 📡 Received SIGINT, performing graceful shutdown...');
+  console.log('[BOT] 🧹 Cleaning up active rooms...');
+  activeRooms.clear();
+  oracleListeningState.clear();
+  console.log('[BOT] ✅ Graceful shutdown completed');
+  process.exit(0);
+});
+
+// Handle uncaught exceptions to prevent crashes
+process.on('uncaughtException', (error) => {
+  console.error('[BOT] ❌ Uncaught Exception:', error);
+  console.log('[BOT] 🔄 Attempting to continue running...');
+  // Don't exit - let the process continue
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('[BOT] ❌ Unhandled Rejection at:', promise, 'reason:', reason);
+  console.log('[BOT] 🔄 Attempting to continue running...');
+  // Don't exit - let the process continue
+});
+
+// Keep the process alive with a heartbeat
+setInterval(() => {
+  console.log(`[BOT] 💓 Heartbeat - Uptime: ${process.uptime().toFixed(1)}s, Active rooms: ${activeRooms.size}`);
+}, 60000); // Log every minute
+
+console.log('[BOT] 🛡️ Process monitoring enabled - bot will stay alive');
