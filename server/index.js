@@ -33,8 +33,7 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
   ? [
       'https://ai-concierge-sybil.vercel.app',
       'https://ai-concierge-mulisa.vercel.app',
-      'https://ai-concierge-tgjt.vercel.app',
-      'https://ai-concierge-tgjt-allardqueks-projects.vercel.app',
+      'https://ai-concierge-allardqueks-projects.vercel.app',
       ...(process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : [])
     ]
   : ["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"];
@@ -449,33 +448,6 @@ io.on('connection', (socket) => {
     if (callerSocketId) {
       io.to(callerSocketId).emit('call-declined-livekit', { calleeCode });
     }
-  });
-
-  // Bot invitation coordination
-  socket.on('bot-invitation-started', ({ roomParticipants }) => {
-    console.log('🤖 Bot invitation started by', socket.id, 'for room participants:', roomParticipants);
-    
-    // Notify all other participants in the room
-    roomParticipants.forEach(participantCode => {
-      const participantSocketId = peerCodeMap.get(participantCode);
-      if (participantSocketId && participantSocketId !== socket.id) {
-        console.log(`📡 Notifying ${participantCode} (${participantSocketId}) about bot invitation start`);
-        io.to(participantSocketId).emit('bot-invitation-started');
-      }
-    });
-  });
-
-  socket.on('bot-invitation-completed', ({ roomParticipants }) => {
-    console.log('🤖 Bot invitation completed by', socket.id, 'for room participants:', roomParticipants);
-    
-    // Notify all other participants in the room
-    roomParticipants.forEach(participantCode => {
-      const participantSocketId = peerCodeMap.get(participantCode);
-      if (participantSocketId && participantSocketId !== socket.id) {
-        console.log(`📡 Notifying ${participantCode} (${participantSocketId}) about bot invitation completion`);
-        io.to(participantSocketId).emit('bot-invitation-completed');
-      }
-    });
   });
 
   // Handle user disconnect
