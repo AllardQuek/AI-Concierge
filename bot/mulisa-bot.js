@@ -669,6 +669,7 @@ app.get('/health', (req, res) => {
     totalActiveRooms: activeRooms.size,
     listeningStates: Object.fromEntries(oracleListeningState),
     agentReady: true,
+    cliRunning: cliRunning,
     uptime: process.uptime()
   });
 });
@@ -710,15 +711,38 @@ app.get('/join-room', async (req, res) => {
     const roomName = getRoomName(number1, number2);
     console.log(`[BOT] 🤖 Oracle will auto-join room: ${roomName}`);
     
-      res.json({ 
-    success: true, 
-    message: `Oracle will auto-join room: ${roomName}`,
-    roomName: roomName,
-    mode: 'auto-join',
-    note: 'Oracle automatically joins all rooms when they are created',
-    agentStatus: 'ready',
-    activeRoomsCount: activeRooms.size
-  });
+    // Check if CLI is running
+    if (!cliRunning) {
+      return res.status(503).json({
+        success: false,
+        error: 'LiveKit Agents CLI is not running yet. Please try again in a moment.',
+        cliRunning: cliRunning
+      });
+    }
+    
+    // Check if agent is already active in this room
+    if (activeRooms.has(roomName)) {
+      console.log(`[BOT] ⚠️ Agent already active in room: ${roomName}`);
+      return res.json({ 
+        success: true, 
+        message: `Oracle already active in room: ${roomName}`,
+        roomName: roomName,
+        mode: 'agent-already-active',
+        agentStatus: 'active',
+        cliRunning: cliRunning
+      });
+    }
+    
+    res.json({ 
+      success: true, 
+      message: `Oracle will auto-join room: ${roomName}`,
+      roomName: roomName,
+      mode: 'auto-join',
+      note: 'Oracle automatically joins all rooms when they are created',
+      agentStatus: 'ready',
+      cliRunning: cliRunning,
+      activeRoomsCount: activeRooms.size
+    });
     
   } catch (error) {
     console.error('[BOT] ❌ Error with room join request:', error);
@@ -918,9 +942,24 @@ app.listen(PORT, () => {
   console.log(`[BOT] 🔇 Stop listening: http://localhost:${PORT}/oracle-stop-listening?room=ROOM&caller=USER`);
   console.log(`[BOT] 🤖 Oracle will auto-join all rooms when they are created`);
   
-  // Start the LiveKit Agents CLI after HTTP server is ready
+  // Start the LiveKit Agents CLI asynchronously (non-blocking)
   console.log(`[BOT] 🚀 Starting LiveKit Agents CLI...`);
-  cli.runApp(new WorkerOptions({ agent: fileURLToPath(import.meta.url) }));
+  
+  // Use setImmediate to ensure HTTP server is fully started first
+  setImmediate(async () => {
+    try {
+      await cli.runApp(new WorkerOptions({ 
+        agent: fileURLToPath(import.meta.url),
+        agent_name: 'mulisa-oracle-agent'
+      }));
+      cliRunning = true;
+      console.log(`[BOT] ✅ LiveKit Agents CLI started successfully`);
+    } catch (error) {
+      console.error(`[BOT] ❌ Failed to start LiveKit Agents CLI:`, error);
+      cliRunning = false;
+      // Don't exit the process - HTTP server can still run
+    }
+  });
 });
 
 // Process monitoring to ensure bot stays alive
@@ -963,9 +1002,12 @@ process.on('unhandledRejection', (reason, promise) => {
   // Don't exit - let the process continue
 });
 
+// Global flag to track if CLI is running
+let cliRunning = false;
+
 // Keep the process alive with a heartbeat
 setInterval(() => {
-  console.log(`[BOT] 💓 Heartbeat - Uptime: ${process.uptime().toFixed(1)}s, Active rooms: ${activeRooms.size}`);
-}, 60000); // Log every minute
+  console.log(`[BOT] 💓 Heartbeat - Uptime: ${process.uptime().toFixed(1)}s, Active rooms: ${activeRooms.size}, CLI running: ${cliRunning}`);
+}, 300000); // Log every 5 minutes
 
 console.log('[BOT] 🛡️ Process monitoring enabled - bot will stay alive');
