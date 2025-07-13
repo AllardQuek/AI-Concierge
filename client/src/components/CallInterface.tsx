@@ -2,6 +2,7 @@ import React from 'react';
 import { Button, ConnectionStatus, ErrorMessage } from './shared';
 import TranscriptionPanel from './TranscriptionPanel';
 import ParticipantsList from './ParticipantsList';
+
 import { TranscriptionResult } from '../services/types';
 
 export type CallState = 'idle' | 'outgoing' | 'incoming' | 'connected';
@@ -26,12 +27,17 @@ interface CallInterfaceProps {
   onRetry: () => void;
   onInviteBot?: () => void;
   isInvitingBot?: boolean;
+  // Oracle Listening Toggle
+  onStartPTT?: () => void;
+  onEndPTT?: () => void;
+  isPTTActive?: boolean;
   // Transcription
   showTranscription: boolean;
   onToggleTranscription: () => void;
   transcripts: TranscriptionResult[];
   isTranscriptionLoading?: boolean;
   transcriptionError?: string;
+
 }
 
 const CallInterface: React.FC<CallInterfaceProps> = ({
@@ -49,11 +55,15 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
   onRetry,
   onInviteBot,
   isInvitingBot = false,
+  onStartPTT,
+  onEndPTT,
+  isPTTActive = false,
   showTranscription,
   onToggleTranscription,
   transcripts,
   isTranscriptionLoading = false,
   transcriptionError,
+
 }) => {
   // Format call duration as MM:SS
   const formatCallDuration = (seconds: number): string => {
@@ -225,6 +235,26 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
               </Button>
             </div>
             
+            {/* Oracle Listening Toggle Button */}
+            {onStartPTT && onEndPTT && participants.some(p => p.isBot) && (
+              <div className="mt-3">
+                <button
+                  onClick={isPTTActive ? onEndPTT : onStartPTT}
+                  disabled={false}
+                  className={`w-full font-medium rounded-lg transition-all duration-200 py-4 px-8 text-lg focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center justify-center gap-2 ${
+                    isPTTActive 
+                      ? 'bg-green-600 hover:bg-green-700 text-white focus:ring-green-500' 
+                      : 'bg-purple-600 hover:bg-purple-700 text-white focus:ring-purple-500'
+                  }`}
+                >
+                  🔮 {isPTTActive ? 'Oracle Listening (Click to Stop)' : 'Ask Oracle (Click to Start)'}
+                </button>
+                <p className="text-xs text-gray-500 text-center mt-1">
+                  {isPTTActive ? 'Oracle is listening for your question...' : 'Click to ask the Oracle for wisdom'}
+                </p>
+              </div>
+            )}
+            
             {/* AI Oracle Invite Button */}
             {onInviteBot && !participants.some(p => p.isBot) && (
               <div className="mt-3">
@@ -247,8 +277,8 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                     </>
                   )}
                 </Button>
-              </div>
-            )}
+              </div>            )}
+
             {/* Transcription Error */}
             {transcriptionError && (
               <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -257,8 +287,7 @@ const CallInterface: React.FC<CallInterfaceProps> = ({
                 </p>
               </div>
             )}
-            
-            {/* Inline Transcription Panel */}
+              {/* Inline Transcription Panel */}
             {showTranscription && (
               <div className="mt-6">
                 <TranscriptionPanel

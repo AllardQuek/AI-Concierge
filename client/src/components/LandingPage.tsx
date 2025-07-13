@@ -163,16 +163,18 @@ const LandingPage: React.FC = () => {
   const callDurationIntervalRef = useRef<number | null>(null);
   const localAudioRef = useRef<HTMLAudioElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
-
   const [showTranscription, setShowTranscription] = useState(false);
   const [transcripts, setTranscripts] = useState<TranscriptionResult[]>([]);
   const [isTranscriptionLoading, setIsTranscriptionLoading] = useState(false);
   const [transcriptionError, setTranscriptionError] = useState<string>('');
 
+
+
   const [livekitCallState, setLivekitCallState] = useState<'idle' | 'outgoing' | 'incoming' | 'connected'>('idle');
   const [livekitCallPartner, setLivekitCallPartner] = useState('');
   const [participants, setParticipants] = useState<Array<{ identity: string; isBot: boolean }>>([]);
   const [isInvitingBot, setIsInvitingBot] = useState(false);
+  const [isOracleListening, setIsOracleListening] = useState(false);
   const liveKitRoomRef = useRef<Room | null>(null);
   
   // Refs to track current values for event handlers
@@ -564,20 +566,10 @@ const LandingPage: React.FC = () => {
       setError('Call was declined');
       stopCallDurationTimer();
     };
-    // Bot invitation state handlers
-    const onBotInvitationStarted = () => {
-      console.log('🤖 Bot invitation started by other participant');
-      setIsInvitingBot(true);
-    };
-    const onBotInvitationCompleted = () => {
-      console.log('🤖 Bot invitation completed');
-      setIsInvitingBot(false);
-    };
+
     (socketRef.current as any).on('user-calling-livekit', onUserCallingLivekit);
     (socketRef.current as any).on('call-accepted-livekit', onCallAcceptedLivekit);
     (socketRef.current as any).on('call-declined-livekit', onCallDeclinedLivekit);
-    (socketRef.current as any).on('bot-invitation-started', onBotInvitationStarted);
-    (socketRef.current as any).on('bot-invitation-completed', onBotInvitationCompleted);
     
     console.log('✅ LiveKit event handlers registered successfully');
     
@@ -586,8 +578,6 @@ const LandingPage: React.FC = () => {
       (socketRef.current as any)?.off('user-calling-livekit', onUserCallingLivekit);
       (socketRef.current as any)?.off('call-accepted-livekit', onCallAcceptedLivekit);
       (socketRef.current as any)?.off('call-declined-livekit', onCallDeclinedLivekit);
-      (socketRef.current as any)?.off('bot-invitation-started', onBotInvitationStarted);
-      (socketRef.current as any)?.off('bot-invitation-completed', onBotInvitationCompleted);
     };
   }, [socketRef.current]); // Removed livekitCallPartner and myNumber dependencies
 
@@ -1050,7 +1040,52 @@ const LandingPage: React.FC = () => {
     setLivekitCallPartner('');
     setParticipants([]);
     setIsInvitingBot(false);
+    setIsOracleListening(false);
     stopCallDurationTimer();
+    
+    // Clear any stored Oracle state
+    console.log('🧹 Clearing Oracle state after call end');
+  };
+
+  // Oracle Listening Toggle handlers
+  const handleStartOracleListening = () => {
+    if (liveKitRoomRef.current && participants.some(p => p.isBot)) {
+      console.log('🔮 Oracle Listening Started');
+      setIsOracleListening(true);
+      
+      // Use HTTP endpoint to communicate with bot
+      const botServerUrl = import.meta.env.VITE_BOT_SERVER_URL || 'http://localhost:4000';
+      const roomName = liveKitRoomRef.current.name;
+      
+      fetch(`${botServerUrl}/oracle-start-listening?room=${encodeURIComponent(roomName)}&caller=${encodeURIComponent(myNumber)}`)
+        .then(response => response.json())
+        .then(data => {
+          console.log('🔮 Oracle listening response:', data);
+        })
+        .catch(error => {
+          console.warn('⚠️ Failed to start Oracle listening:', error);
+        });
+    }
+  };
+
+  const handleStopOracleListening = () => {
+    if (liveKitRoomRef.current && participants.some(p => p.isBot)) {
+      console.log('🔇 Oracle Listening Stopped');
+      setIsOracleListening(false);
+      
+      // Use HTTP endpoint to communicate with bot
+      const botServerUrl = import.meta.env.VITE_BOT_SERVER_URL || 'http://localhost:4000';
+      const roomName = liveKitRoomRef.current.name;
+      
+      fetch(`${botServerUrl}/oracle-stop-listening?room=${encodeURIComponent(roomName)}&caller=${encodeURIComponent(myNumber)}`)
+        .then(response => response.json())
+        .then(data => {
+          console.log('🔇 Oracle stop listening response:', data);
+        })
+        .catch(error => {
+          console.warn('⚠️ Failed to stop Oracle listening:', error);
+        });
+    }
   };
 
   useEffect(() => {
@@ -1676,13 +1711,8 @@ const LandingPage: React.FC = () => {
       return;
     }
 
-    console.log('🤖 Inviting bot with validated numbers:', { myNumber: cleanMyNumber, partner: cleanPartnerNumber });
+    console.log('🤖 Requesting bot to join room with numbers:', { myNumber: cleanMyNumber, partner: cleanPartnerNumber });
 
-    // Notify other participants that bot invitation is starting
-    socketRef.current?.emit('bot-invitation-started', {
-      roomParticipants: [myNumber, livekitCallPartner]
-    });
-    
     setIsInvitingBot(true);
     
     try {
@@ -1693,20 +1723,16 @@ const LandingPage: React.FC = () => {
       const result = await response.json();
       
       if (result.success) {
-        console.log('🤖 Bot invited successfully:', result.message);
+        console.log('🤖 Bot join request successful:', result.message);
         // The bot should appear in the participants list automatically via the room events
       } else {
-        console.error('❌ Failed to invite bot:', result.error);
-        setError(`Failed to invite AI Oracle: ${result.error}`);
+        console.error('❌ Failed to request bot join:', result.error);
+        setError(`Failed to request AI Oracle join: ${result.error}`);
       }
     } catch (error) {
-      console.error('❌ Error inviting bot:', error);
-      setError('Failed to invite AI Oracle. Please try again.');
+      console.error('❌ Error requesting bot join:', error);
+      setError('Failed to request AI Oracle join. Please try again.');
     } finally {
-      // Notify other participants that bot invitation is completed
-      socketRef.current?.emit('bot-invitation-completed', {
-        roomParticipants: [myNumber, livekitCallPartner]
-      });
       setIsInvitingBot(false);
     }
   };
@@ -2000,6 +2026,8 @@ const LandingPage: React.FC = () => {
     setShowTranscription(!showTranscription);
   };
 
+
+
   const cleanup = () => {
     console.log('🧹 Cleaning up call services...');
     
@@ -2190,6 +2218,9 @@ const LandingPage: React.FC = () => {
               onRetry={recoverFromError}
               onInviteBot={inviteBotToCall}
               isInvitingBot={isInvitingBot}
+              onStartPTT={handleStartOracleListening}
+              onEndPTT={handleStopOracleListening}
+              isPTTActive={isOracleListening}
               showTranscription={showTranscription}
               onToggleTranscription={toggleTranscription}
               transcripts={transcripts}

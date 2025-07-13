@@ -1,272 +1,633 @@
 // Load environment variables based on NODE_ENV
-const dotenv = require('dotenv');
+import dotenv from 'dotenv';
 const envFile = process.env.NODE_ENV === 'production'
   ? '.env.production'
   : '.env.local';
 dotenv.config({ path: envFile });
 
-const { RoomServiceClient, AccessToken } = require('livekit-server-sdk');
-const { Room } = require('livekit-client');
-const express = require('express');
-const cors = require('cors');
+import {
+  AutoSubscribe,
+  WorkerOptions,
+  cli,
+  defineAgent,
+  llm,
+  pipeline,
+  tts,
+  AudioByteStream,
+} from '@livekit/agents';
+import * as openai from '@livekit/agents-plugin-openai';
+import { fileURLToPath } from 'node:url';
+import express from 'express';
+import cors from 'cors';
+import OpenAI from 'openai';
+import * as sdk from 'microsoft-cognitiveservices-speech-sdk';
 
-const LIVEKIT_URL = process.env.LIVEKIT_URL;
-const LIVEKIT_API_KEY = process.env.LIVEKIT_API_KEY;
-const LIVEKIT_API_SECRET = process.env.LIVEKIT_API_SECRET;
-const BOT_IDENTITY = process.env.LIVEKIT_BOT_IDENTITY || 'mulisa-bot';
+// Oracle AI Configuration
+const ORACLE_PERSONALITY = {
+  voice: "mystical-sage",
+  wisdom: "prophetic-insights", 
+  timing: "natural-pauses",
+  style: "ancient-wisdom-modern-relevance"
+};
 
-const activeRooms = {};
-const roomMonitoringIntervals = {};
-const livekitRooms = {};
+// Bot state management
+const activeRooms = new Map();
+const oracleListeningState = new Map(); // Track listening state per room
 
-// Room cleanup configuration
-const ROOM_CHECK_INTERVAL = 30000; // Check every 30 seconds
-const EMPTY_ROOM_TIMEOUT = 60000; // Wait 1 minute before leaving empty room
+// Debug function to log current state
+const logBotState = () => {
+  console.log('[BOT] 🔍 Current Bot State:');
+  console.log(`   Active rooms: ${activeRooms.size}`);
+  activeRooms.forEach((roomData, roomName) => {
+    console.log(`   - Room: ${roomName}, Status: ${roomData.status}, Joined: ${roomData.joinedAt}`);
+  });
+  console.log(`   Oracle listening states: ${oracleListeningState.size}`);
+  oracleListeningState.forEach((listening, roomName) => {
+    console.log(`   - Room: ${roomName}, Listening: ${listening}`);
+  });
+};
+
+// Oracle Wisdom Engine
+class OracleWisdomEngine {
+  constructor() {
+    this.client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  
+  async generateWisdom(context) {
+    // Check if OpenAI key is available
+    if (!process.env.OPENAI_API_KEY) {
+      console.log('[ORACLE] ⚠️ No OpenAI API key - using mock wisdom');
+      return this.getMockWisdom();
+    }
+  
+    const oraclePrompt = `You are Mulisa, an ancient oracle with mystical wisdom. You are listening to a conversation.
+    
+                          Context: ${context}
+                          
+                          Provide brief (25-35 words), mystical yet practical insight. Use metaphors from nature, time, or ancient wisdom.
+                          Speak as an oracle would - mysterious but helpful.
+                          
+                          Begin with phrases like:
+                          - "The winds whisper..."
+                          - "Ancient wisdom reveals..." 
+                          - "I see in the cosmic patterns..."
+                          - "The Oracle speaks..."`;
+  
+    try {
+      const completion = await this.client.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [{ role: "user", content: oraclePrompt }],
+        max_tokens: 80,
+        temperature: 0.8
+      });
+  
+      const wisdom = completion.choices[0].message.content.trim();
+      return wisdom;
+    } catch (error) {
+      console.error(`[ORACLE] ❌ Error generating wisdom:`, error);
+      
+      // Handle specific OpenAI quota errors
+      if (error.code === 'insufficient_quota' || error.status === 429) {
+        console.log('[ORACLE] 💳 OpenAI quota exceeded - using mock wisdom');
+        return this.getMockWisdom();
+      }
+      
+      // Handle other OpenAI errors
+      if (error.status) {
+        console.log(`[ORACLE] 🔄 OpenAI API error (${error.status}) - using mock wisdom`);
+        return this.getMockWisdom();
+      }
+      
+      console.log('[ORACLE] 🔄 Falling back to mock wisdom');
+      return this.getMockWisdom();
+    }
+  }
+  
+  getMockWisdom() {
+    const mockWisdomList = [
+      "The winds whisper of change approaching...",
+      "Ancient wisdom reveals that patience is the key to understanding.",
+      "I see in the cosmic patterns that your path is clear.",
+      "The Oracle speaks: trust in the journey, not just the destination.",
+      "Time flows like a river, carrying all things toward their purpose.",
+      "The stars align to show that wisdom comes from listening.",
+      "In the silence between words, truth often reveals itself.",
+      "The Oracle senses that your question holds its own answer.",
+      "Like the moon reflecting the sun's light, you reflect inner wisdom.",
+      "The ancient ones say: the greatest strength lies in gentle persistence."
+    ];
+    
+    const randomIndex = Math.floor(Math.random() * mockWisdomList.length);
+    return mockWisdomList[randomIndex];
+  }
+}
+
+// Simple dummy VAD that works with LiveKit Agents
+class DummyVAD {
+  constructor() {
+    this.isListening = false;
+    this.listeners = new Map();
+  }
+  
+  setListeningState(roomName, listening) {
+    this.isListening = listening;
+    oracleListeningState.set(roomName, listening);
+    console.log(`[VAD] Oracle listening ${listening ? 'enabled' : 'disabled'} for room: ${roomName}`);
+  }
+  
+  // Required interface methods for LiveKit Agents
+  on(event, callback) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, []);
+    }
+    this.listeners.get(event).push(callback);
+    console.log(`[VAD] Event listener registered for: ${event}`);
+  }
+  
+  off(event, callback) {
+    const listeners = this.listeners.get(event);
+    if (listeners) {
+      const index = listeners.indexOf(callback);
+      if (index > -1) {
+        listeners.splice(index, 1);
+      }
+    }
+  }
+  
+  // Emit events to registered listeners
+  emit(event, data) {
+    const listeners = this.listeners.get(event);
+    if (listeners) {
+      listeners.forEach(callback => {
+        try {
+          callback(data);
+        } catch (error) {
+          console.error(`[VAD] Error in event listener for ${event}:`, error);
+        }
+      });
+    }
+  }
+  
+  async detectTurn(audioStream) {
+    // Only process audio if listening is enabled
+    if (!this.isListening) {
+      return null; // No speech detected when not listening
+    }
+    
+    // Simple approach: assume speech is detected when listening is enabled
+    console.log('[VAD] Audio detected and processing (listening enabled)');
+    
+    // Emit speech detected event
+    this.emit('speechDetected', audioStream);
+    
+    return audioStream; // Return the audio stream for processing
+  }
+  
+  // Additional methods that LiveKit Agents might expect
+  start() {
+    console.log('[VAD] Dummy VAD started');
+  }
+  
+  stop() {
+    console.log('[VAD] Dummy VAD stopped');
+  }
+  
+  isRunning() {
+    return true; // Always return true since we're always "running"
+  }
+  
+  // Required stream method for LiveKit Agents
+  stream() {
+    console.log('[VAD] Stream method called');
+    // Return a proper async iterable stream that LiveKit expects
+    return {
+      [Symbol.asyncIterator]: async function* () {
+        // Yield nothing - empty stream that doesn't block
+        return;
+      },
+      pushFrame: (frame) => {
+        // LiveKit calls this to push audio frames to the VAD
+        // console.log('[VAD] Frame pushed to stream');
+        // We don't process frames since this is a dummy VAD
+      },
+      on: (event, callback) => {
+        console.log(`[VAD] Stream event listener: ${event}`);
+      },
+      off: (event, callback) => {
+        console.log(`[VAD] Stream event removed: ${event}`);
+      },
+      emit: (event, data) => {
+        console.log(`[VAD] Stream event emitted: ${event}`);
+      },
+      destroy: () => {
+        console.log('[VAD] Stream destroyed');
+      }
+    };
+  }
+
+  // Add pushFrame method to satisfy LiveKit interface
+  pushFrame(frame) {
+    // No-op for dummy VAD
+    // Optionally log for debugging:
+    // console.log('[VAD] pushFrame called');
+  }
+  
+  // Additional methods that LiveKit Agents might expect
+  addFrame(frame) {
+    // Alias for pushFrame
+    this.pushFrame(frame);
+  }
+  
+  close() {
+    // No-op for dummy VAD
+  }
+  
+  destroy() {
+    // No-op for dummy VAD
+  }
+}
+
+// Initialize Oracle services
+const oracleWisdomEngine = new OracleWisdomEngine();
+
+// Custom Azure TTS Component for LiveKit Agents
+const AZURE_TTS_SAMPLE_RATE = 16000; // Match Azure Speech Raw16Khz16BitMonoPcm format
+const AZURE_TTS_CHANNELS = 1;
+
+class AzureTTS extends tts.TTS {
+  #speechConfig;
+  label = 'azure.TTS';
+
+  constructor() {
+    super(AZURE_TTS_SAMPLE_RATE, AZURE_TTS_CHANNELS, { streaming: false });
+    this.initializeSpeechConfig();
+  }
+
+  initializeSpeechConfig() {
+    const azureKey = process.env.AZURE_SPEECH_KEY;
+    const azureRegion = process.env.AZURE_SPEECH_REGION;
+    
+    if (!azureKey || !azureRegion) {
+      console.log('[AZURE TTS] ⚠️ Azure Speech credentials not found - TTS will be disabled');
+      return;
+    }
+
+    try {
+      this.#speechConfig = sdk.SpeechConfig.fromSubscription(azureKey, azureRegion);
+      this.#speechConfig.speechSynthesisVoiceName = "en-US-JennyNeural"; // Mystical-sounding voice
+      this.#speechConfig.speechSynthesisLanguage = "en-US";
+      
+      // Configure Azure Speech to output raw PCM format that LiveKit expects
+      // This is crucial for audio compatibility - LiveKit expects raw PCM, not WAV
+      this.#speechConfig.speechSynthesisOutputFormat = sdk.SpeechSynthesisOutputFormat.Raw16Khz16BitMonoPcm;
+      
+      console.log('[AZURE TTS] ✅ Azure Speech TTS initialized successfully with raw PCM output');
+    } catch (error) {
+      console.error('[AZURE TTS] ❌ Failed to initialize Azure Speech TTS:', error);
+    }
+  }
+
+  synthesize(text) {
+    if (!this.#speechConfig) {
+      console.log('[AZURE TTS] ⚠️ Azure TTS not configured - creating empty stream');
+      return new AzureChunkedStream(this, text, null);
+    }
+
+    // Create a promise that resolves with the Azure speech response
+    const speechPromise = this.synthesizeSpeech(text);
+    return new AzureChunkedStream(this, text, speechPromise);
+  }
+
+  async synthesizeSpeech(text) {
+    return new Promise((resolve, reject) => {
+      const synthesizer = new sdk.SpeechSynthesizer(this.#speechConfig);
+      let hasResolved = false; // Add deduplication flag
+      let callbackCount = 0; // Add callback counter
+      
+      synthesizer.speakTextAsync(
+        text,
+        result => {
+          callbackCount++;
+          console.log(`[AZURE TTS] 🔄 Callback triggered (count: ${callbackCount})`);
+          
+          if (result.reason === sdk.ResultReason.SynthesizingAudioCompleted) {
+            console.log(`[AZURE TTS] ✅ Speech synthesis completed (callback #${callbackCount})`);
+            
+            // Prevent multiple resolutions
+            if (!hasResolved) {
+              hasResolved = true;
+              console.log(`[AZURE TTS] 🎯 Processing synthesis result (callback #${callbackCount})`);
+              resolve(result.audioData);
+            } else {
+              console.log(`[AZURE TTS] ⚠️ Duplicate synthesis completion ignored (callback #${callbackCount})`);
+            }
+          } else {
+            console.error(`[AZURE TTS] ❌ Speech synthesis failed (callback #${callbackCount}):`, result.errorDetails);
+            if (!hasResolved) {
+              hasResolved = true;
+              reject(new Error(result.errorDetails));
+            }
+          }
+          synthesizer.close();
+        },
+        error => {
+          callbackCount++;
+          console.error(`[AZURE TTS] ❌ Speech synthesis error (callback #${callbackCount}):`, error);
+          if (!hasResolved) {
+            hasResolved = true;
+            reject(error);
+          }
+          synthesizer.close();
+        }
+      );
+    });
+  }
+
+  stream() {
+    throw new Error('Streaming is not supported on Azure TTS');
+  }
+}
+
+class AzureChunkedStream extends tts.ChunkedStream {
+  label = 'azure.ChunkedStream';
+
+  constructor(tts, text, speechPromise) {
+    super(text, tts);
+    this.#run(speechPromise);
+  }
+
+  async #run(speechPromise) {
+    try {
+      if (!speechPromise) {
+        // No Azure config - close immediately
+        this.queue.close();
+        return;
+      }
+
+      const audioData = await speechPromise;
+      const requestId = crypto.randomUUID();
+      
+      console.log(`[AZURE TTS] 🎵 Processing audio data: ${audioData.byteLength} bytes`);
+      
+      // Azure returns ArrayBuffer - ensure it's properly formatted for LiveKit
+      // Raw16Khz16BitMonoPcm format returns 16-bit signed integers
+      if (!(audioData instanceof ArrayBuffer)) {
+        throw new Error('Azure TTS returned unexpected audio data format');
+      }
+      
+      // Convert Azure audio data to proper format
+      console.log(`[AZURE TTS] 🎵 Audio data type: ${audioData.constructor.name}`);
+      console.log(`[AZURE TTS] 🎵 Audio data byteLength: ${audioData.byteLength}`);
+      
+      // Validate audio data format
+      if (audioData.byteLength === 0) {
+        throw new Error('Azure TTS returned empty audio data');
+      }
+      
+      // Check if we need to convert ArrayBuffer to proper format
+      let processedAudioData = audioData;
+      if (audioData instanceof ArrayBuffer) {
+        // Azure Raw16Khz16BitMonoPcm returns 16-bit signed integers
+        // We need to ensure this is compatible with LiveKit's AudioByteStream
+        console.log(`[AZURE TTS] 🎵 Processing ArrayBuffer of ${audioData.byteLength} bytes`);
+        
+        // Validate the data size (should be even for 16-bit samples)
+        if (audioData.byteLength % 2 !== 0) {
+          console.warn('[AZURE TTS] ⚠️ Audio data size is not even - may indicate format issue');
+        }
+        
+        // Convert to Int16Array to validate the data
+        const int16Data = new Int16Array(audioData);
+        console.log(`[AZURE TTS] 🎵 Converted to ${int16Data.length} Int16 samples`);
+        
+        // Check for non-zero samples (to ensure we have actual audio)
+        const nonZeroSamples = int16Data.filter(sample => sample !== 0).length;
+        console.log(`[AZURE TTS] 🎵 Non-zero samples: ${nonZeroSamples}/${int16Data.length} (${(nonZeroSamples/int16Data.length*100).toFixed(1)}%)`);
+        
+        if (nonZeroSamples === 0) {
+          console.warn('[AZURE TTS] ⚠️ All audio samples are zero - this indicates silence or format issue');
+        }
+        
+        processedAudioData = audioData; // Keep as ArrayBuffer for AudioByteStream
+      }
+      
+      const audioByteStream = new AudioByteStream(AZURE_TTS_SAMPLE_RATE, AZURE_TTS_CHANNELS);
+      const frames = audioByteStream.write(processedAudioData);
+      
+      console.log(`[AZURE TTS] 🎵 Generated ${frames.length} audio frames`);
+      if (frames.length === 0) {
+        console.error('[AZURE TTS] ❌ No audio frames generated - critical format issue');
+        throw new Error('AudioByteStream.write() returned no frames');
+      }
+      
+      // Validate frames
+      for (let i = 0; i < Math.min(frames.length, 3); i++) {
+        const frame = frames[i];
+        console.log(`[AZURE TTS] 🎵 Frame ${i}: sampleRate=${frame.sampleRate}, channels=${frame.channels}, samplesPerChannel=${frame.samplesPerChannel}, data.length=${frame.data.length}`);
+      }
+
+      let lastFrame;
+      let frameCount = 0;
+      const sendLastFrame = (segmentId, final) => {
+        if (lastFrame) {
+          console.log(`[AZURE TTS] 🎵 Sending frame ${frameCount}: final=${final}, samples=${lastFrame.samplesPerChannel}`);
+          this.queue.put({ requestId, segmentId, frame: lastFrame, final });
+          lastFrame = undefined;
+        }
+      };
+
+      for (const frame of frames) {
+        sendLastFrame(requestId, false);
+        lastFrame = frame;
+        frameCount++;
+      }
+      sendLastFrame(requestId, true);
+
+      console.log(`[AZURE TTS] 🎵 Total frames sent: ${frameCount}`);
+      console.log(`[AZURE TTS] 🎵 Closing audio stream queue`);
+      this.queue.close();
+    } catch (error) {
+      console.error('[AZURE TTS] ❌ Error in ChunkedStream:', error);
+      this.queue.close();
+    }
+  }
+}
 
 // Debug environment variables
-console.log(`[BOT] LIVEKIT_URL: ${LIVEKIT_URL}`);
-console.log(`[BOT] LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}`);
-console.log(`[BOT] LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET ? 'SET (' + LIVEKIT_API_SECRET.length + ' chars)' : 'NOT SET'}`);
+console.log(`[BOT] LIVEKIT_URL: ${process.env.LIVEKIT_URL}`);
+console.log(`[BOT] LIVEKIT_API_KEY: ${process.env.LIVEKIT_API_KEY}`);
+console.log(`[BOT] LIVEKIT_API_SECRET: ${process.env.LIVEKIT_API_SECRET ? 'SET (' + process.env.LIVEKIT_API_SECRET.length + ' chars)' : 'NOT SET'}`);
+console.log(`[ORACLE] 🔮 Bot Identity: mulisa-oracle`);
+console.log(`[ORACLE] 🤖 OpenAI API Key: ${process.env.OPENAI_API_KEY ? 'SET (' + process.env.OPENAI_API_KEY.length + ' chars)' : 'NOT SET'}`);
+console.log(`[AZURE TTS] 🎤 Azure Speech Key: ${process.env.AZURE_SPEECH_KEY ? 'SET (' + process.env.AZURE_SPEECH_KEY.length + ' chars)' : 'NOT SET'}`);
+console.log(`[AZURE TTS] 🌍 Azure Speech Region: ${process.env.AZURE_SPEECH_REGION || 'NOT SET'}`);
+console.log(`[ORACLE] 🎭 Personality: ${ORACLE_PERSONALITY.style}`);
 
-// Initialize room service client
-const roomService = new RoomServiceClient(LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET);
-
-function getRoomName(numberA, numberB) {
-  // Validate that both numbers are provided and non-empty
-  if (!numberA || !numberB) {
-    throw new Error(`Invalid phone numbers: numberA="${numberA}", numberB="${numberB}". Both numbers must be provided.`);
-  }
+// Define the Oracle Agent - auto-joins all rooms
+export default defineAgent({
+  prewarm: async (proc) => {
+    console.log('[ORACLE] 🔮 Warming up the Oracle...');
+    console.log('[ORACLE] ✅ Oracle warmed up and ready');
+  },
   
-  // Normalize both numbers to ensure consistent room naming (matching client logic)
-  const normalizeForRoom = (phoneNumber) => {
-    const digitsOnly = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
-    
-    // Handle 8-digit Singapore mobile numbers (without country code)
-    if (digitsOnly.length === 8 && (digitsOnly.startsWith('8') || digitsOnly.startsWith('9'))) {
-      return `65${digitsOnly}`; // Add 65 prefix for consistency
-    }
-    
-    // Handle numbers that already have 65 prefix
-    if (digitsOnly.startsWith('65') && digitsOnly.length === 10) {
-      return digitsOnly;
-    }
-    
-    // Return as-is if we can't normalize
-    return digitsOnly;
-  };
-  
-  const cleanA = normalizeForRoom(numberA);
-  const cleanB = normalizeForRoom(numberB);
-  
-  // Validate that cleaning didn't result in empty strings
-  if (!cleanA || !cleanB) {
-    throw new Error(`Invalid phone numbers after cleaning: cleanA="${cleanA}", cleanB="${cleanB}". Numbers must contain digits.`);
-  }
-  
-  const [first, second] = [cleanA, cleanB].sort();
-  return `room-${first}-${second}`;
-}
-
-async function createBotToken(room, identity) {
-  try {
-    console.log(`[BOT] Creating token for room: ${room}, identity: ${identity}`);
-    const at = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
-      identity: identity,
-      ttl: '10m',
-    });
-    at.addGrant({ 
-      room: room, 
-      roomJoin: true, 
-      canPublish: true, 
-      canSubscribe: true 
-    });
-    const token = at.toJwt();
-    console.log(`[BOT] Token type: ${typeof token}, value:`, token);
-    
-    // Handle both string and Buffer/Uint8Array responses
-    const tokenString = typeof token === 'string' ? token : token.toString();
-    console.log(`[BOT] Token created successfully: ${tokenString.substring(0, 50)}...`);
-    return tokenString;
-  } catch (err) {
-    console.error(`[BOT] Error creating token:`, err);
-    throw err;
-  }
-}
-
-async function joinExistingRoom(numberA, numberB) {
-  console.log(`[BOT] Attempting to join room with numbers: numberA="${numberA}", numberB="${numberB}"`);
-  
-  let roomName;
-  try {
-    roomName = getRoomName(numberA, numberB);
-    console.log(`[BOT] Generated room name: ${roomName}`);
-  } catch (err) {
-    console.error(`[BOT] Error generating room name:`, err.message);
-    throw err;
-  }
-  
-  if (activeRooms[roomName]) {
-    console.log(`[BOT] Already joined room: ${roomName}`);
-    return roomName;
-  }
-
-  try {
-    // Check if the room exists first
-    console.log(`[BOT] Checking if room exists: ${roomName}`);
-    const rooms = await roomService.listRooms();
-    const roomExists = rooms.some(room => room.name === roomName);
-    
-    if (!roomExists) {
-      throw new Error(`Room ${roomName} does not exist yet. Users need to start the call first.`);
-    }
-
-    // Create bot token
-    const botToken = await createBotToken(roomName, BOT_IDENTITY);
-    
-    // Create LiveKit Room instance and connect
-    const room = new Room();
-    livekitRooms[roomName] = room;
-    
-    // Set up room event handlers
-    room.on('connected', () => {
-      console.log(`[BOT] 🟢 Connected to LiveKit room: ${roomName}`);
-    });
-    
-    room.on('disconnected', () => {
-      console.log(`[BOT] 🔴 Disconnected from LiveKit room: ${roomName}`);
-    });
-    
-    room.on('participantConnected', (participant) => {
-      console.log(`[BOT] 👋 Participant joined: ${participant.identity}`);
-    });
-    
-    room.on('participantDisconnected', (participant) => {
-      console.log(`[BOT] 👋 Participant left: ${participant.identity}`);
-    });
-    
-    // Connect to the room
-    console.log(`[BOT] Connecting to LiveKit room: ${roomName} with identity: ${BOT_IDENTITY}`);
-    await room.connect(LIVEKIT_URL, botToken);
-    
-    // Mark the room as joined in our internal state
-    activeRooms[roomName] = {
-      name: roomName,
-      joinedAt: new Date(),
-      status: 'connected'
-    };
-
-    console.log(`[BOT] Successfully joined existing room: ${roomName}`);
-    
-    // Start monitoring the room for participants leaving
-    startRoomMonitoring(roomName);
-    
-    // Here you could add logic to:
-    // 1. Set up audio processing for the room
-    // 2. Initialize AI transcription services
-    // 3. Start oracle wisdom processing
-    // 4. Begin conversation analysis
-    
-    return roomName;
-    
-  } catch (err) {
-    console.error(`[BOT] Failed to join room: ${roomName} - ${err.message}`);
-    // Clean up on error
-    if (livekitRooms[roomName]) {
-      try {
-        await livekitRooms[roomName].disconnect();
-      } catch (disconnectErr) {
-        console.error(`[BOT] Error disconnecting from room during cleanup:`, disconnectErr);
-      }
-      delete livekitRooms[roomName];
-    }
-    throw err;
-  }
-}
-
-// Room monitoring and cleanup functions
-async function checkRoomStatus(roomName) {
-  try {
-    const participants = await roomService.listParticipants(roomName);
-    
-    // Filter out the bot itself from participant count
-    const humanParticipants = participants.filter(p => p.identity !== BOT_IDENTITY);
-    
-    console.log(`[BOT] Room ${roomName} has ${humanParticipants.length} human participants`);
-    
-    if (humanParticipants.length === 0) {
-      // Room is empty, start countdown to leave
-      if (!activeRooms[roomName].emptyStartTime) {
-        activeRooms[roomName].emptyStartTime = new Date();
-        console.log(`[BOT] Room ${roomName} is now empty. Starting exit countdown...`);
-      } else {
-        const emptyDuration = Date.now() - activeRooms[roomName].emptyStartTime.getTime();
-        if (emptyDuration >= EMPTY_ROOM_TIMEOUT) {
-          console.log(`[BOT] Room ${roomName} has been empty for ${emptyDuration}ms. Leaving room.`);
-          await leaveRoom(roomName);
-        }
-      }
-    } else {
-      // Room has participants, reset empty timer
-      if (activeRooms[roomName].emptyStartTime) {
-        console.log(`[BOT] Room ${roomName} has participants again. Canceling exit countdown.`);
-        delete activeRooms[roomName].emptyStartTime;
-      }
-    }
-  } catch (err) {
-    if (err.message.includes('not found') || err.message.includes('does not exist')) {
-      console.log(`[BOT] Room ${roomName} no longer exists. Cleaning up.`);
-      await leaveRoom(roomName);
-    } else {
-      console.error(`[BOT] Error checking room status for ${roomName}:`, err.message);
-    }
-  }
-}
-
-async function leaveRoom(roomName) {
-  console.log(`[BOT] Leaving room: ${roomName}`);
-  
-  // Stop monitoring the room
-  if (roomMonitoringIntervals[roomName]) {
-    clearInterval(roomMonitoringIntervals[roomName]);
-    delete roomMonitoringIntervals[roomName];
-  }
-  
-  // Disconnect from LiveKit room
-  if (livekitRooms[roomName]) {
+  entry: async (ctx) => {
+    let roomName;
     try {
-      console.log(`[BOT] Disconnecting from LiveKit room: ${roomName}`);
-      await livekitRooms[roomName].disconnect();
-    } catch (err) {
-      console.error(`[BOT] Error disconnecting from LiveKit room:`, err);
+      roomName = ctx.room.name;
+      
+      console.log(`[ORACLE] 🔮 Oracle Mulisa awakening in room: ${roomName}`);
+      
+      // Oracle personality context
+      const oracleContext = new llm.ChatContext().append({
+        role: llm.ChatRole.SYSTEM,
+        text: `You are Mulisa, an ancient oracle with mystical wisdom. You speak in a mystical, prophetic manner using metaphors from nature and ancient wisdom. Keep responses brief (25-35 words) and profound. You are a voice assistant, so use short and concise responses, avoiding unpronounceable punctuation.`,
+      });
+
+      await ctx.connect(undefined, AutoSubscribe.AUDIO_ONLY);
+      console.log('[ORACLE] 👂 Oracle listening for seekers...');
+      
+      const participant = await ctx.waitForParticipant();
+      console.log(`[ORACLE] 👁️ Oracle senses presence: ${participant.identity}`);
+
+      // Create dummy VAD with toggle control
+      const dummyVad = new DummyVAD();
+      
+      // Create the pipeline voice agent with dummy VAD and Azure TTS
+      const agent = new pipeline.VoicePipelineAgent(
+        dummyVad,         // Dummy VAD with toggle control
+        new openai.STT(), // Real Speech-to-Text
+        new openai.LLM(), // Real Language Model
+        new AzureTTS(),   // Custom Azure Text-to-Speech instead of OpenAI TTS
+        { 
+          chatCtx: oracleContext,
+          streaming: false // Non-streaming for complete responses
+        },
+      );
+      
+      // Start the agent with error handling
+      // let agentPublication;
+      try {
+        console.log('[ORACLE] 🚀 Starting voice pipeline agent...');
+        agent.start(ctx.room, participant);
+        console.log('[ORACLE] ✅ Voice pipeline agent started successfully');
+        
+        // Get the agent's audio publication
+        // agentPublication = agent.agentPublication;
+        // if (!agentPublication) {
+        //   console.log('[ORACLE] ⚠️ Agent publication not available yet, will wait...');
+        // }
+      } catch (error) {
+        console.error('[ORACLE] ❌ Failed to start voice pipeline agent:', error);
+        // Continue anyway - the agent might still work
+      }
+
+      // Log room info for debugging
+      console.log(`[ORACLE] 🔍 Room info:`, {
+        name: ctx.room.name,
+        sid: ctx.room.sid,
+        state: ctx.room.state,
+        hasParticipants: !!ctx.room.participants,
+        participantsType: ctx.room.participants ? typeof ctx.room.participants : 'undefined'
+      });
+      
+      // Wait for bot's audio track to be published (with timeout)
+      // if (agentPublication) {
+      //   console.log('[ORACLE] 🎤 Waiting for bot audio track to be published...');
+      //   try {
+      //     await Promise.race([
+      //       agentPublication.waitForSubscription(),
+      //       new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000))
+      //     ]);
+      //     console.log('[ORACLE] ✅ Bot audio track published successfully');
+      //   } catch (error) {
+      //     console.warn(`[ORACLE] ⚠️ Audio track publication timeout: ${error.message}`);
+      //     console.warn(`[ORACLE] ⚠️ Proceeding with speech synthesis anyway...`);
+      //   }
+      // } else {
+      //   console.log('[ORACLE] ⚠️ Agent publication not available, proceeding without waiting...');
+      // }
+
+      const requestId = crypto.randomUUID();
+      const greetingText = 'Hello! The Oracle Mulisa has joined your call.';
+      console.log(`[AZURE TTS] �� Starting synthesis ${requestId} for text: "${greetingText}"`);
+      console.log('[ORACLE] 🎵 Starting speech synthesis...');
+      console.log('[ORACLE] 🎵 Agent state before speech:', agent.state);
+      // console.log('[ORACLE] 🎵 Audio publication status:', agentPublication ? 'available' : 'not available');
+          
+      // Oracle greeting
+      try {
+        const speechHandle = await agent.say(greetingText, true);
+        console.log('[ORACLE] ✅ Oracle greeting spoken successfully');
+        console.log('[ORACLE] 🎵 Speech handle:', speechHandle ? 'created' : 'null');
+        console.log('[ORACLE] 🎵 Agent state after speech:', agent.state);
+      } catch (error) {
+        console.error('[ORACLE] ❌ Failed to speak greeting:', error);
+        console.error('[ORACLE] ❌ Error details:', error.stack);
+      }
+      
+      // Track room activity
+      activeRooms.set(roomName, {
+        name: roomName,
+        joinedAt: new Date(),
+        status: 'connected',
+        participants: [participant.identity],
+        vad: dummyVad,
+        agent: agent
+      });
+      
+      console.log(`[ORACLE] 🔮 Oracle Mulisa is now active in room: ${roomName}`);
+      console.log(`[ORACLE] 🎤 Oracle listening is disabled by default - use toggle to enable`);
+      
+      // Clean up when room disconnects
+      ctx.room.on('disconnected', () => {
+        console.log(`[ORACLE] 🔌 Oracle disconnecting from room: ${roomName}`);
+        activeRooms.delete(roomName);
+        oracleListeningState.delete(roomName);
+        console.log(`[ORACLE] 🧹 Cleaned up state for room: ${roomName}`);
+        logBotState(); // Log state after cleanup
+      });
+      
+      // Monitor room state to ensure agent stays active
+      ctx.room.on('participantConnected', (participant) => {
+        console.log(`[ORACLE] 👤 Participant joined: ${participant.identity} in room: ${roomName}`);
+        logBotState();
+      });
+      
+      ctx.room.on('participantDisconnected', (participant) => {
+        console.log(`[ORACLE] 👤 Participant left: ${participant.identity} in room: ${roomName}`);
+        logBotState();
+      });
+      
+      // Handle room reconnection if needed
+      ctx.room.on('reconnecting', () => {
+        console.log(`[ORACLE] 🔄 Reconnecting to room: ${roomName}`);
+      });
+      
+      ctx.room.on('reconnected', () => {
+        console.log(`[ORACLE] ✅ Reconnected to room: ${roomName}`);
+      });
+      
+      // Log initial state
+      logBotState();
+      
+    } catch (error) {
+      console.error('[ORACLE] ❌ Fatal error in Oracle agent:', error);
+      console.error('[ORACLE] ❌ Error stack:', error.stack);
+      
+      // Clean up any partial state
+      if (roomName) {
+        activeRooms.delete(roomName);
+        oracleListeningState.delete(roomName);
+        console.log(`[ORACLE] 🧹 Cleaned up partial state for room: ${roomName}`);
+      }
+      
+      // Don't re-throw - let the agent continue running and try to join other rooms
+      console.log('[ORACLE] 🔄 Agent will continue running and try to join other rooms');
     }
-    delete livekitRooms[roomName];
-  }
-  
-  // Clean up room data
-  delete activeRooms[roomName];
-  
-  console.log(`[BOT] Successfully left room: ${roomName}`);
-  
-  // Here you could add cleanup logic such as:
-  // 1. Stop AI transcription services
-  // 2. Save conversation summary
-  // 3. Send final oracle insights
-  // 4. Clean up any temporary files
-}
+  },
+});
 
-function startRoomMonitoring(roomName) {
-  if (roomMonitoringIntervals[roomName]) {
-    console.log(`[BOT] Already monitoring room: ${roomName}`);
-    return;
-  }
-  
-  console.log(`[BOT] Starting monitoring for room: ${roomName}`);
-  roomMonitoringIntervals[roomName] = setInterval(() => {
-    checkRoomStatus(roomName);
-  }, ROOM_CHECK_INTERVAL);
-}
-
-// HTTP server to trigger room join
+// HTTP server for toggle control
 const defaultPort = 4000;
 const PORT = process.env.BOT_PORT ? parseInt(process.env.BOT_PORT, 10) : defaultPort;
 const allowedOrigins = process.env.ALLOWED_ORIGINS
@@ -278,166 +639,277 @@ app.use(cors({
   origin: allowedOrigins,
   credentials: true
 }));
-app.get('/join-room', async (req, res) => {
-  const { number1, number2 } = req.query;
-  if (!number1 || !number2) return res.status(400).send('Missing number1 or number2');
-  try {
-    const roomName = await joinExistingRoom(number1, number2);
-    const botToken = await createBotToken(roomName, BOT_IDENTITY);
-    res.json({ 
-      success: true, 
-      roomName: roomName,
-      message: `Bot joined existing room: ${roomName}`,
-      botToken: botToken
-    });
-  } catch (err) {
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to join room: ' + err.message 
-    });
-  }
-});
 
-// Add endpoint to manually leave a room
-app.get('/leave-room', async (req, res) => {
-  const { number1, number2 } = req.query;
-  if (!number1 || !number2) return res.status(400).send('Missing number1 or number2');
-  
-  let roomName;
-  try {
-    roomName = getRoomName(number1, number2);
-  } catch (err) {
-    return res.status(400).json({
-      success: false,
-      error: 'Invalid phone numbers: ' + err.message
-    });
-  }
-  
-  if (!activeRooms[roomName]) {
-    return res.json({ 
-      success: false, 
-      message: `Bot is not in room: ${roomName}` 
-    });
-  }
-  
-  try {
-    await leaveRoom(roomName);
-    res.json({ 
-      success: true, 
-      message: `Bot left room: ${roomName}` 
-    });
-  } catch (err) {
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to leave room: ' + err.message 
-    });
-  }
-});
+app.use(express.json());
 
-// Add endpoint to get room status
-app.get('/room-status', async (req, res) => {
-  const { room } = req.query;
-  if (!room) {
-    return res.json({ 
-      activeRooms: Object.keys(activeRooms),
-      totalRooms: Object.keys(activeRooms).length 
-    });
-  }
+// Health check endpoint
+app.get('/health', (req, res) => {
+  const roomDetails = Array.from(activeRooms.entries()).map(([roomName, roomData]) => ({
+    roomName,
+    status: roomData.status,
+    joinedAt: roomData.joinedAt,
+    participants: roomData.participants
+  }));
   
-  if (activeRooms[room]) {
-    try {
-      const participants = await roomService.listParticipants(room);
-      res.json({
-        room: room,
-        active: true,
-        participants: participants.length,
-        details: activeRooms[room]
-      });
-    } catch (err) {
-      res.json({
-        room: room,
-        active: true,
-        participants: 'unknown',
-        error: err.message
-      });
-    }
-  } else {
-    res.json({
-      room: room,
-      active: false
-    });
-  }
-});
-
-// Add endpoint to list active rooms with participant counts
-app.get('/active-rooms', async (req, res) => {
-  const roomData = {};
-  
-  for (const roomName of Object.keys(activeRooms)) {
-    try {
-      const participants = await roomService.listParticipants(roomName);
-      const humanParticipants = participants.filter(p => p.identity !== BOT_IDENTITY);
-      
-      roomData[roomName] = {
-        ...activeRooms[roomName],
-        participantCount: humanParticipants.length,
-        participants: humanParticipants.map(p => p.identity)
-      };
-    } catch (err) {
-      roomData[roomName] = {
-        ...activeRooms[roomName],
-        participantCount: 'unknown',
-        error: err.message
-      };
-    }
-  }
-  
-  res.json({
-    success: true,
-    activeRooms: roomData,
-    totalRooms: Object.keys(activeRooms).length
+  res.json({ 
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    activeRooms: roomDetails,
+    oracleStatus: 'awake',
+    mode: 'auto-join',
+    totalActiveRooms: activeRooms.size,
+    listeningStates: Object.fromEntries(oracleListeningState),
+    agentReady: true,
+    uptime: process.uptime()
   });
 });
 
+// Join room endpoint - now just returns success (Oracle auto-joins)
+app.get('/join-room', async (req, res) => {
+  const { number1, number2 } = req.query;
+  
+  if (!number1 || !number2) {
+    return res.status(400).json({
+      success: false,
+      error: 'Both number1 and number2 parameters are required'
+    });
+  }
+
+  try {
+    // Generate room name (same logic as frontend)
+    const getRoomName = (numberA, numberB) => {
+      const normalizeForRoom = (phoneNumber) => {
+        const digitsOnly = phoneNumber.replace(/[\s\-\(\)\+]/g, '');
+        
+        if (digitsOnly.length === 8 && (digitsOnly.startsWith('8') || digitsOnly.startsWith('9'))) {
+          return `65${digitsOnly}`;
+        }
+        
+        if (digitsOnly.startsWith('65') && digitsOnly.length === 10) {
+          return digitsOnly;
+        }
+        
+        return digitsOnly;
+      };
+      
+      const cleanA = normalizeForRoom(numberA);
+      const cleanB = normalizeForRoom(numberB);
+      const [first, second] = [cleanA, cleanB].sort();
+      return `room-${first}-${second}`;
+    };
+
+    const roomName = getRoomName(number1, number2);
+    console.log(`[BOT] 🤖 Oracle will auto-join room: ${roomName}`);
+    
+      res.json({ 
+    success: true, 
+    message: `Oracle will auto-join room: ${roomName}`,
+    roomName: roomName,
+    mode: 'auto-join',
+    note: 'Oracle automatically joins all rooms when they are created',
+    agentStatus: 'ready',
+    activeRoomsCount: activeRooms.size
+  });
+    
+  } catch (error) {
+    console.error('[BOT] ❌ Error with room join request:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message
+    });
+  }
+});
+
+// Diagnostic endpoint to check agent status
+app.get('/agent-status', (req, res) => {
+  const { room } = req.query;
+  
+  if (room) {
+    const roomData = activeRooms.get(room);
+    res.json({
+      room: room,
+      isActive: !!roomData,
+      roomData: roomData ? {
+        status: roomData.status,
+        joinedAt: roomData.joinedAt,
+        participants: roomData.participants
+      } : null,
+      timestamp: new Date().toISOString()
+    });
+  } else {
+    res.json({
+      totalActiveRooms: activeRooms.size,
+      activeRooms: Array.from(activeRooms.keys()),
+      listeningStates: Object.fromEntries(oracleListeningState),
+      agentReady: true,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Test speech synthesis endpoint
+app.get('/test-speech', async (req, res) => {
+  const { room, text } = req.query;
+  
+  try {
+    if (!room) {
+      return res.status(400).json({
+        success: false,
+        error: 'Room parameter is required'
+      });
+    }
+    
+    const testText = text || 'Hello! This is a test of the Oracle speech synthesis.';
+    console.log(`[BOT] 🧪 Test speech request: room=${room}, text="${testText}"`);
+    
+    // Check if room is active
+    const roomData = activeRooms.get(room);
+    if (!roomData) {
+      return res.json({ 
+        success: false,
+        error: 'Room not found or bot not active in this room'
+      });
+    }
+    
+    // Test speech synthesis
+    console.log('[BOT] 🧪 Starting test speech synthesis...');
+    const speechHandle = await roomData.agent.say(testText, true);
+    
+    res.json({
+      success: true,
+      message: `Test speech initiated in room: ${room}`,
+      text: testText,
+      speechHandle: speechHandle ? {
+        id: speechHandle.id,
+        text: speechHandle.text,
+        initialized: speechHandle.initialized
+      } : null,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('[BOT] ❌ Test speech error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+// Oracle start listening endpoint
+app.get('/oracle-start-listening', async (req, res) => {
+  const { room, caller } = req.query;
+  
+  try {
+    if (!room) {
+      return res.status(400).json({
+        success: false,
+        error: 'Room parameter is required'
+      });
+    }
+    
+    console.log(`[BOT] 🔮 Oracle start listening request: room=${room}, caller=${caller}`);
+    
+    // Check if room is active
+    const roomData = activeRooms.get(room);
+    if (!roomData) {
+      return res.json({ 
+        success: false,
+        error: 'Room not found or bot not active in this room'
+      });
+    }
+    
+    // Enable listening
+    roomData.vad.setListeningState(room, true);
+    
+    res.json({
+      success: true,
+      message: `Oracle listening started in room: ${room}`,
+      caller: caller,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Oracle stop listening endpoint
+app.get('/oracle-stop-listening', async (req, res) => {
+  const { room, caller } = req.query;
+  
+  try {
+    if (!room) {
+      return res.status(400).json({
+        success: false,
+        error: 'Room parameter is required'
+      });
+    }
+    
+    console.log(`[BOT] 🔇 Oracle stop listening request: room=${room}, caller=${caller}`);
+    
+    // Check if room is active
+    const roomData = activeRooms.get(room);
+    if (!roomData) {
+      return res.json({
+        success: false,
+        error: 'Room not found or bot not active in this room'
+      });
+    }
+    
+    // Disable listening
+    roomData.vad.setListeningState(room, false);
+    
+    res.json({
+      success: true,
+      message: `Oracle listening stopped in room: ${room}`,
+      caller: caller,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Cleanup endpoint to manually clear stuck state
+app.post('/cleanup', (req, res) => {
+  console.log('[BOT] 🧹 Manual cleanup requested');
+  const beforeCount = activeRooms.size;
+  
+  // Clear all active rooms
+  activeRooms.clear();
+  oracleListeningState.clear();
+  
+  console.log(`[BOT] 🧹 Cleaned up ${beforeCount} active rooms and all invited rooms`);
+  logBotState();
+  
+  res.json({ 
+    success: true, 
+    message: `Cleaned up ${beforeCount} active rooms and all invited rooms`,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Start the HTTP server first
 app.listen(PORT, () => {
-  console.log(`[BOT] Mulisa bot HTTP server listening on port ${PORT}`);
-  console.log(`[BOT] Available endpoints:`);
-  console.log(`[BOT]   GET /join-room?number1=123&number2=456 - Join a room`);
-  console.log(`[BOT]   GET /leave-room?number1=123&number2=456 - Leave a room`);
-  console.log(`[BOT]   GET /active-rooms - List all active rooms with participants`);
-  console.log(`[BOT]   GET /room-status?room=room-name - Get specific room status`);
-  console.log(`[BOT] Room monitoring: Checks every ${ROOM_CHECK_INTERVAL/1000}s, leaves after ${EMPTY_ROOM_TIMEOUT/1000}s empty`);
-});
-
-// Graceful shutdown handling
-process.on('SIGINT', async () => {
-  console.log('\n[BOT] Received SIGINT. Gracefully shutting down...');
-  // Leave all active rooms
-  const roomNames = Object.keys(activeRooms);
-  for (const roomName of roomNames) {
-    try {
-      console.log(`[BOT] Leaving room during shutdown: ${roomName}`);
-      await leaveRoom(roomName);
-    } catch (err) {
-      console.error(`[BOT] Error leaving room ${roomName}:`, err.message);
-    }
-  }
-  console.log('[BOT] Shutdown complete');
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  console.log('\n[BOT] Received SIGTERM. Gracefully shutting down...');
-  // Leave all active rooms
-  const roomNames = Object.keys(activeRooms);
-  for (const roomName of roomNames) {
-    try {
-      console.log(`[BOT] Leaving room during shutdown: ${roomName}`);
-      await leaveRoom(roomName);
-    } catch (err) {
-      console.error(`[BOT] Error leaving room ${roomName}:`, err.message);
-    }
-  }
-  console.log('[BOT] Shutdown complete');
-  process.exit(0);
+  console.log(`[BOT] 🌐 HTTP server running on port ${PORT}`);
+  console.log(`[BOT] 📊 Health check: http://localhost:${PORT}/health`);
+  console.log(`[BOT] 🔍 Agent status: http://localhost:${PORT}/agent-status`);
+  console.log(`[BOT] 🧪 Test speech: http://localhost:${PORT}/test-speech?room=ROOM&text=MESSAGE`);
+  console.log(`[BOT] 🤖 Join room: http://localhost:${PORT}/join-room?number1=X&number2=Y`);
+  console.log(`[BOT] 🔮 Start listening: http://localhost:${PORT}/oracle-start-listening?room=ROOM&caller=USER`);
+  console.log(`[BOT] 🔇 Stop listening: http://localhost:${PORT}/oracle-stop-listening?room=ROOM&caller=USER`);
+  console.log(`[BOT] 🤖 Oracle will auto-join all rooms when they are created`);
+  
+  // Start the LiveKit Agents CLI after HTTP server is ready
+  console.log(`[BOT] 🚀 Starting LiveKit Agents CLI...`);
+  cli.runApp(new WorkerOptions({ agent: fileURLToPath(import.meta.url) }));
 });

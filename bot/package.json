@@ -1,0 +1,26 @@
+{
+  "name": "mulisa-oracle-agent",
+  "version": "2.0.0",
+  "description": "Mulisa Oracle Bot - AI-powered voice conversation assistant using LiveKit Agents",
+  "main": "mulisa-bot.js",
+  "type": "module",
+  "scripts": {
+    "start": "node mulisa-bot.js start",
+    "dev": "node mulisa-bot.js dev",
+    "connect": "node mulisa-bot.js connect"
+  },
+  "dependencies": {
+    "@livekit/agents": "^0.7.7",
+    "@livekit/agents-plugin-cartesia": "^0.1.4",
+    "@livekit/agents-plugin-deepgram": "^0.5.7",
+    "@livekit/agents-plugin-openai": "^0.9.2",
+    "cors": "^2.8.5",
+    "dotenv": "^17.1.0",
+    "express": "^5.1.0",
+    "microsoft-cognitiveservices-speech-sdk": "^1.45.0",
+    "openai": "^4.28.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
